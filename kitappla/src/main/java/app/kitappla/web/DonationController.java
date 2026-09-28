@@ -1,7 +1,6 @@
 package app.kitappla.web;
 
 import app.kitappla.domain.*;
-import app.kitappla.repo.ClaimRepository;
 import app.kitappla.security.AppUserDetails;
 import app.kitappla.service.BookMetadata;
 import app.kitappla.service.BookService;
@@ -25,18 +24,16 @@ public class DonationController {
     private final BookService bookService;
     private final app.kitappla.service.CoverService coverService;
     private final DonationService donationService;
-    private final ClaimRepository claims;
     private final PickupPointService points;
     private final app.kitappla.config.Features features;
 
     public DonationController(BookService bookService, app.kitappla.service.CoverService coverService,
                               DonationService donationService,
-                              ClaimRepository claims, PickupPointService points,
+                              PickupPointService points,
                               app.kitappla.config.Features features) {
         this.bookService = bookService;
         this.coverService = coverService;
         this.donationService = donationService;
-        this.claims = claims;
         this.points = points;
         this.features = features;
     }
@@ -118,7 +115,7 @@ public class DonationController {
         // Her bağış için alanlar (adres yalnızca bağışçıya gösterilir)
         // Talepler bağış başına değil tek sorguda okunur (API'deki "bağışlarım" ile aynı)
         Map<Long, List<Claim>> gruplu = list.isEmpty() ? Map.of()
-                : claims.findByDonationsWithStudent(list.stream().map(DonationView::donation).toList()).stream()
+                : donationService.findClaimsByDonations(list.stream().map(DonationView::donation).toList()).stream()
                         .collect(java.util.stream.Collectors.groupingBy(c -> c.getDonation().getId()));
         Map<Long, List<Claim>> claimers = new LinkedHashMap<>();
         for (DonationView v : list) {

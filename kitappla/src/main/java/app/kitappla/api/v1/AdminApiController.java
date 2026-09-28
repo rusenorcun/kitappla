@@ -5,7 +5,6 @@ import app.kitappla.domain.ConversationKind;
 import app.kitappla.domain.Report;
 import app.kitappla.domain.ReportKind;
 import app.kitappla.domain.User;
-import app.kitappla.repo.*;
 import app.kitappla.security.CurrentUser;
 import app.kitappla.service.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,38 +21,20 @@ import java.util.Map;
 public class AdminApiController {
 
     private final AdminService adminService;
-    private final UserRepository userRepository;
     private final ReportService reportService;
     private final PickupPointService pickupPointService;
     private final MessageService messageService;
-    private final ClaimRepository claimRepository;
-    private final BookRequestRepository bookRequestRepository;
-    private final SwapOfferRepository swapOfferRepository;
-    private final DonationRepository donationRepository;
-    private final SwapBookRepository swapBookRepository;
     private final AdminMonitorService monitorService;
 
     public AdminApiController(AdminService adminService,
-                              UserRepository userRepository,
                               ReportService reportService,
                               PickupPointService pickupPointService,
                               MessageService messageService,
-                              ClaimRepository claimRepository,
-                              BookRequestRepository bookRequestRepository,
-                              SwapOfferRepository swapOfferRepository,
-                              DonationRepository donationRepository,
-                              SwapBookRepository swapBookRepository,
                               AdminMonitorService monitorService) {
         this.adminService = adminService;
-        this.userRepository = userRepository;
         this.reportService = reportService;
         this.pickupPointService = pickupPointService;
         this.messageService = messageService;
-        this.claimRepository = claimRepository;
-        this.bookRequestRepository = bookRequestRepository;
-        this.swapOfferRepository = swapOfferRepository;
-        this.donationRepository = donationRepository;
-        this.swapBookRepository = swapBookRepository;
         this.monitorService = monitorService;
     }
 
@@ -142,7 +123,7 @@ public class AdminApiController {
         User admin = CurrentUser.get();
         if (admin == null) throw new IllegalStateException("Giriş yapmalısınız.");
 
-        User target = userRepository.findById(id)
+        User target = adminService.findUser(id)
                 .orElseThrow(() -> new IllegalStateException("Kullanıcı bulunamadı."));
         adminService.setBlocked(admin, id, !target.isBlocked());
         return ResponseEntity.noContent().build();
@@ -154,7 +135,7 @@ public class AdminApiController {
     public ResponseEntity<UserDto> toggleUserAdminRole(@PathVariable Long id, @RequestBody(required = false) SetAdminRoleBody body) {
         User admin = CurrentUser.get();
         if (admin == null) throw new IllegalStateException("Giriş yapmalısınız.");
-        User target = userRepository.findById(id)
+        User target = adminService.findUser(id)
                 .orElseThrow(() -> new IllegalStateException("Kullanıcı bulunamadı."));
         boolean makeAdmin = body != null && body.admin() != null ? body.admin() : !target.isAdmin();
         User updated = adminService.setAdmin(admin, id, makeAdmin);
@@ -286,7 +267,7 @@ public class AdminApiController {
                 entityDetails = "Sohbet yüklenemedi: " + ex.getMessage();
             }
         } else if (r.getKind() == ReportKind.CLAIM) {
-            var claimOpt = claimRepository.findByIdWithDetails(r.getRefId());
+            var claimOpt = reportService.findClaim(r.getRefId());
             if (claimOpt.isPresent()) {
                 var c = claimOpt.get();
                 entityTitle = c.getDonation() != null && c.getDonation().getBook() != null ? c.getDonation().getBook().getTitle() : "Bağış Talebi";
@@ -297,7 +278,7 @@ public class AdminApiController {
                 }
             }
         } else if (r.getKind() == ReportKind.REQUEST) {
-            var reqOpt = bookRequestRepository.findByIdWithDetails(r.getRefId());
+            var reqOpt = reportService.findRequest(r.getRefId());
             if (reqOpt.isPresent()) {
                 var req = reqOpt.get();
                 entityTitle = req.getBook() != null ? req.getBook().getTitle() : "İstek";
@@ -305,7 +286,7 @@ public class AdminApiController {
                 entityStatus = req.getStatus() != null ? req.getStatus().name() : null;
             }
         } else if (r.getKind() == ReportKind.SWAP_OFFER) {
-            var offerOpt = swapOfferRepository.findByIdWithDetails(r.getRefId());
+            var offerOpt = reportService.findOffer(r.getRefId());
             if (offerOpt.isPresent()) {
                 var o = offerOpt.get();
                 String offeredTitle = o.getOfferedSwapBook() != null && o.getOfferedSwapBook().getBook() != null ? o.getOfferedSwapBook().getBook().getTitle() : "?";
@@ -315,7 +296,7 @@ public class AdminApiController {
                 entityStatus = o.getStatus() != null ? o.getStatus().name() : null;
             }
         } else if (r.getKind() == ReportKind.DONATION) {
-            var donOpt = donationRepository.findByIdWithDetails(r.getRefId());
+            var donOpt = reportService.findDonation(r.getRefId());
             if (donOpt.isPresent()) {
                 var d = donOpt.get();
                 entityTitle = d.getBook() != null ? d.getBook().getTitle() : "Bağış";
@@ -324,7 +305,7 @@ public class AdminApiController {
                 entityDetails = d.getDescription();
             }
         } else if (r.getKind() == ReportKind.SWAP_BOOK) {
-            var swapOpt = swapBookRepository.findByIdWithDetails(r.getRefId());
+            var swapOpt = reportService.findSwapBook(r.getRefId());
             if (swapOpt.isPresent()) {
                 var sb = swapOpt.get();
                 entityTitle = sb.getBook() != null ? sb.getBook().getTitle() : "Takas Kitabı";

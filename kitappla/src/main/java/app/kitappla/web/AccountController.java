@@ -2,7 +2,6 @@ package app.kitappla.web;
 
 import app.kitappla.domain.User;
 import app.kitappla.security.AppUserDetails;
-import app.kitappla.repo.ClaimRepository;
 import app.kitappla.service.DonationService;
 import app.kitappla.service.PickupPointService;
 import app.kitappla.service.QuotaService;
@@ -19,17 +18,15 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class AccountController {
 
     private final QuotaService quotaService;
-    private final ClaimRepository claims;
     private final DonationService donationService;
     private final PickupPointService points;
     private final app.kitappla.service.PanoService pano;
 
-    public AccountController(QuotaService quotaService, ClaimRepository claims,
+    public AccountController(QuotaService quotaService,
                              DonationService donationService, PickupPointService points,
                              app.kitappla.service.PanoService pano) {
         this.pano = pano;
         this.quotaService = quotaService;
-        this.claims = claims;
         this.donationService = donationService;
         this.points = points;
     }
@@ -47,7 +44,7 @@ public class AccountController {
     @GetMapping("/aldiklarim")
     public String aldiklarim(@AuthenticationPrincipal AppUserDetails principal, Model model) {
         User user = principal.getUser();
-        model.addAttribute("claims", claims.findByStudentWithDetails(user));
+        model.addAttribute("claims", donationService.findClaimsByStudent(user));
         model.addAttribute("noktalar", points.active());
         return "aldiklarim";
     }

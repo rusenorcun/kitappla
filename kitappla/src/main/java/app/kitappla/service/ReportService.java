@@ -242,4 +242,24 @@ public class ReportService {
         reports.nullifyReportedUser(u);
         reports.nullifyReviewedBy(u);
     }
+
+    public Optional<Claim> findClaim(Long id) {
+        return claims.findByIdWithDetails(id);
+    }
+
+    public Optional<BookRequest> findRequest(Long id) {
+        return requests.findByIdWithDetails(id);
+    }
+
+    public Optional<SwapOffer> findOffer(Long id) {
+        return offers.findByIdWithDetails(id);
+    }
+
+    public Optional<Donation> findDonation(Long id) {
+        return donations.findByIdWithDetails(id);
+    }
+
+    public Optional<SwapBook> findSwapBook(Long id) {
+        return swapBooks.findByIdWithDetails(id);
+    }
 }

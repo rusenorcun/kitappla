@@ -372,4 +372,8 @@ public class AdminService {
     private static String suffix(String reason) {
         return reason == null || reason.isBlank() ? "" : " Gerekçe: " + reason.trim();
     }
+
+    public java.util.Optional<User> findUser(Long userId) {
+        return users.findById(userId);
+    }
 }

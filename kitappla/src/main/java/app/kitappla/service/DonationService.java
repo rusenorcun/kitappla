@@ -590,4 +590,12 @@ public class DonationService {
             case UNIVERSITE -> TargetLevel.UNIVERSITE;
         };
     }
+
+    public List<Claim> findClaimsByStudent(User student) {
+        return claims.findByStudentWithDetails(student);
+    }
+
+    public List<Claim> findClaimsByDonations(List<Donation> donationList) {
+        return claims.findByDonationsWithStudent(donationList);
+    }
 }

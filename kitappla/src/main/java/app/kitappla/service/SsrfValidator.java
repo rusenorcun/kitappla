@@ -76,6 +76,12 @@ public final class SsrfValidator {
             }
         }
 
+        int port = uri.getPort();
+        if (port != -1 && port != 80 && port != 443 && port != 8080 && port != 8443) {
+            log.warn("SSRF engellendi (yasaklı port {}): {}", port, uri);
+            return false;
+        }
+
         try {
             InetAddress[] addresses = InetAddress.getAllByName(host);
             if (addresses == null || addresses.length == 0) {

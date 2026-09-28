@@ -159,4 +159,11 @@ class ApiSecurityTest {
         mvc.perform(get("/api/v1/admin/stats").with(user(as(adminUser))))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    void unauthenticated_controller_check_returns_401() throws Exception {
+        mvc.perform(get("/api/v1/my/claims"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
 }

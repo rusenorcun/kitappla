@@ -8,11 +8,6 @@ import app.kitappla.service.MessageService;
 import app.kitappla.service.PickupPointService;
 import app.kitappla.service.ReportService;
 import app.kitappla.domain.ConversationKind;
-import app.kitappla.repo.BookRequestRepository;
-import app.kitappla.repo.ClaimRepository;
-import app.kitappla.repo.DonationRepository;
-import app.kitappla.repo.SwapBookRepository;
-import app.kitappla.repo.SwapOfferRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
@@ -37,28 +32,15 @@ public class AdminController {
     private final PickupPointService points;
     private final ReportService reports;
     private final MessageService messages;
-    private final ClaimRepository claims;
-    private final BookRequestRepository requests;
-    private final SwapOfferRepository offers;
-    private final DonationRepository donations;
-    private final SwapBookRepository swapBooks;
     private final AdminMonitorService monitorService;
 
     public AdminController(AdminService admin, PickupPointService points,
                            ReportService reports, MessageService messages,
-                           ClaimRepository claims, BookRequestRepository requests,
-                           SwapOfferRepository offers, DonationRepository donations,
-                           SwapBookRepository swapBooks,
                            AdminMonitorService monitorService) {
         this.admin = admin;
         this.points = points;
         this.reports = reports;
         this.messages = messages;
-        this.claims = claims;
-        this.requests = requests;
-        this.offers = offers;
-        this.donations = donations;
-        this.swapBooks = swapBooks;
         this.monitorService = monitorService;
     }
 
@@ -281,15 +263,15 @@ public class AdminController {
                 model.addAttribute("sohbetHatasi", ex.getMessage());
             }
         } else if (r.getKind() == ReportKind.CLAIM) {
-            claims.findByIdWithDetails(r.getRefId()).ifPresent(c -> model.addAttribute("claim", c));
+            reports.findClaim(r.getRefId()).ifPresent(c -> model.addAttribute("claim", c));
         } else if (r.getKind() == ReportKind.REQUEST) {
-            requests.findByIdWithDetails(r.getRefId()).ifPresent(req -> model.addAttribute("request", req));
+            reports.findRequest(r.getRefId()).ifPresent(req -> model.addAttribute("request", req));
         } else if (r.getKind() == ReportKind.SWAP_OFFER) {
-            offers.findByIdWithDetails(r.getRefId()).ifPresent(o -> model.addAttribute("offer", o));
+            reports.findOffer(r.getRefId()).ifPresent(o -> model.addAttribute("offer", o));
         } else if (r.getKind() == ReportKind.DONATION) {
-            donations.findByIdWithDetails(r.getRefId()).ifPresent(d -> model.addAttribute("donation", d));
+            reports.findDonation(r.getRefId()).ifPresent(d -> model.addAttribute("donation", d));
         } else if (r.getKind() == ReportKind.SWAP_BOOK) {
-            swapBooks.findByIdWithDetails(r.getRefId()).ifPresent(sb -> model.addAttribute("swapBook", sb));
+            reports.findSwapBook(r.getRefId()).ifPresent(sb -> model.addAttribute("swapBook", sb));
         }
 
         // Şikâyet destek sohbeti (yönetici ile üye arasındaki irtibat)

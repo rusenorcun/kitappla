@@ -49,6 +49,9 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiError> handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
         if (isNotApiRequest(request)) throw ex;
+        if ("Giriş yapmalısınız.".equals(ex.getMessage())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiError(ex.getMessage(), "UNAUTHORIZED"));
+        }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiError(ex.getMessage()));
     }
 

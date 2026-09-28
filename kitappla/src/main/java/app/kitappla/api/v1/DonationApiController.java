@@ -6,7 +6,6 @@ import java.util.Map;
 import app.kitappla.api.dto.*;
 import app.kitappla.config.Features;
 import app.kitappla.domain.*;
-import app.kitappla.repo.ClaimRepository;
 import app.kitappla.security.CurrentUser;
 import app.kitappla.service.*;
 import jakarta.validation.Valid;
@@ -23,18 +22,15 @@ public class DonationApiController {
 
     private final DonationService donationService;
     private final BookService bookService;
-    private final ClaimRepository claimRepository;
     private final MessageService messageService;
     private final Features features;
 
     public DonationApiController(DonationService donationService,
                                  BookService bookService,
-                                 ClaimRepository claimRepository,
                                  MessageService messageService,
                                  Features features) {
         this.donationService = donationService;
         this.bookService = bookService;
-        this.claimRepository = claimRepository;
         this.messageService = messageService;
         this.features = features;
     }
@@ -176,8 +172,8 @@ public class DonationApiController {
         if (views.isEmpty()) return ResponseEntity.ok(List.of());
 
         // Talepler ve sohbet kimlikleri bağış başına değil, toplu okunur
-        Map<Long, List<Claim>> talepler = claimRepository
-                .findByDonationsWithStudent(views.stream().map(DonationView::donation).toList()).stream()
+        Map<Long, List<Claim>> talepler = donationService
+                .findClaimsByDonations(views.stream().map(DonationView::donation).toList()).stream()
                 .collect(Collectors.groupingBy(c -> c.getDonation().getId()));
         Map<Long, Long> sohbetler = messageService.conversationIds(ConversationKind.CLAIM,
                 talepler.values().stream().flatMap(List::stream).map(Claim::getId).toList());
@@ -198,7 +194,7 @@ public class DonationApiController {
         User me = CurrentUser.get();
         if (me == null) throw new IllegalStateException("Giriş yapmalısınız.");
 
-        List<Claim> claims = claimRepository.findByStudentWithDetails(me);
+        List<Claim> claims = donationService.findClaimsByStudent(me);
         Map<Long, Long> sohbetler = messageService.conversationIds(ConversationKind.CLAIM,
                 claims.stream().map(Claim::getId).toList());
         List<MyClaimDto> dtos = claims.stream()
