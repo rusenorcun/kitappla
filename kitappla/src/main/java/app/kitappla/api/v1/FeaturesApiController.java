@@ -23,6 +23,8 @@ public class FeaturesApiController {
                 features.isShipping(),
                 features.isPurchase(),
                 features.isAddress(),
+                features.isHandover(),
+                features.isDocument(),
                 true,
                 true
         ));

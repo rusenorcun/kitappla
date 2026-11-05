@@ -88,15 +88,24 @@ public class RequestService {
             throw new IllegalStateException("Aynı anda en fazla " + MAX_OPEN_REQUESTS
                     + " açık isteğin olabilir. Önce mevcut isteklerinden birini kaldır.");
 
-        boolean duplicate = requests.findByStudentWithDetails(user).stream()
-                .anyMatch(r -> r.getStatus() == RequestStatus.OPEN && r.getBook().getId().equals(book.getId()));
-        if (duplicate) throw new IllegalStateException("Bu kitap için zaten açık bir isteğin var.");
+        if (requests.existsByStudentAndBookAndStatus(user, book, RequestStatus.OPEN))
+            throw new IllegalStateException("Bu kitap için zaten açık bir isteğin var.");
 
         BookRequest r = new BookRequest();
         r.setStudent(user);
         r.setBook(book);
         r.setDescription(Metin.kisalt(description, 500));
         return requests.save(r);
+    }
+
+    /** İsteği karşıla ve varsa buluşma önerisini aynı işlem (transaction) içinde kaydet. */
+    @Transactional
+    public BookRequest fulfill(Long requestId, User fulfiller, DonationSource source, MeetingRequest meetingRequest) {
+        BookRequest r = fulfill(requestId, fulfiller, source);
+        if (meetingRequest != null && meetingRequest.at() != null) {
+            return arrange(r.getId(), fulfiller, meetingRequest);
+        }
+        return r;
     }
 
     /** İsteği karşıla. Kota, isteği OLUŞTURAN kişiye göre kontrol edilir. */
@@ -125,7 +134,7 @@ public class RequestService {
             conversations.save(c);
         });
         r.setStatus(RequestStatus.FULFILLED);
-        r.setSource(source == null ? DonationSource.PURCHASE : source);
+        r.setSource(source != null ? source : (features.isPurchase() ? DonationSource.PURCHASE : DonationSource.OWN));
         r.setFulfilledBy(fulfiller);
         r.setFulfilledAt(Instant.now());
         requests.save(r);
@@ -162,6 +171,11 @@ public class RequestService {
         User eskiKarsilayan = r.getFulfilledBy();
         String kitap = r.getBook().getTitle();
 
+        conversations.findByKindAndRefId(ConversationKind.REQUEST, requestId).ifPresent(c -> {
+            c.archive();
+            conversations.save(c);
+        });
+
         r.setStatus(RequestStatus.OPEN);
         r.setFulfilledBy(null);
         r.setFulfilledAt(null);
@@ -184,7 +198,7 @@ public class RequestService {
     /** Karşılayan kargoya verdi. Yalnızca kargo akışı açıkken kullanılır. */
     @Transactional
     public void ship(Long requestId, User fulfiller) {
-        BookRequest r = ownFulfilled(requestId, fulfiller);
+        BookRequest r = ownFulfilledForUpdate(requestId, fulfiller);
         if (!features.isShipping())
             throw new IllegalStateException("Kargo akışı kapalı; teslim kampüste yüz yüze yapılır.");
         if (r.getStatus() != RequestStatus.FULFILLED)
@@ -216,6 +230,8 @@ public class RequestService {
             throw new IllegalStateException("Bu isteği henüz kimse karşılamadı.");
         if (r.getStatus() == RequestStatus.DELIVERED)
             throw new IllegalStateException("Bu kitap zaten teslim edildi.");
+        if (r.getStatus() == RequestStatus.SHIPPED)
+            throw new IllegalStateException("Kargoya verilmiş kayıt için buluşma ayarlanamaz.");
         // İsteyen gelmediğinde kayıt kapanır ve kota hakkı yanar; yeni buluşmayla diriltilemez.
         if (r.getStatus() == RequestStatus.NO_SHOW)
             throw new IllegalStateException("Bu istek gelinmedi bildirimiyle kapandı.");
@@ -251,6 +267,8 @@ public class RequestService {
 
         if (r.getStatus() == RequestStatus.DELIVERED)
             throw new IllegalStateException("Bu kitap zaten teslim edilmiş.");
+        if (r.getStatus() == RequestStatus.SHIPPED)
+            throw new IllegalStateException("Kargoya verilmiş kayıt için gelinmedi bildirilemez.");
         if (r.getStatus() == RequestStatus.NO_SHOW)
             throw new IllegalStateException("Bu kayıt zaten gelinmedi olarak işaretlenmiş.");
         if (r.getStatus() == RequestStatus.CANCELLED)
@@ -260,7 +278,7 @@ public class RequestService {
         if (r.getMeeting().getAt() != null && Instant.now().isBefore(r.getMeeting().getAt()))
             throw new IllegalStateException("Buluşma saati daha gelmedi.");
 
-        User gelmeyen = isteyen ? r.getFulfilledBy() : r.getStudent();
+        User karsi = isteyen ? r.getFulfilledBy() : r.getStudent();
         String kitap = r.getBook().getTitle();
 
         conversations.findByKindAndRefId(ConversationKind.REQUEST, requestId).ifPresent(c -> {
@@ -273,6 +291,7 @@ public class RequestService {
             r.setStatus(RequestStatus.OPEN);
             r.setFulfilledBy(null);
             r.setFulfilledAt(null);
+            r.setSource(null);
             r.setMeeting(new Meeting());
         } else {
             // İsteyen gelmedi: kayıt kapanır, kota hakkı yanar
@@ -280,7 +299,8 @@ public class RequestService {
         }
         requests.save(r);
 
-        if (gelmeyen != null) {
+        if (karsi != null) {
+            User gelmeyen = users.findByIdForUpdate(karsi.getId()).orElse(karsi);
             gelmeyen.setNoShowCount(gelmeyen.getNoShowCount() + 1);
             users.save(gelmeyen);
             notifications.notify(gelmeyen, "gelmedi",
@@ -305,12 +325,14 @@ public class RequestService {
      */
     @Transactional
     public int askiyaAlinanUyeninIstekleriniKapat(User askida) {
-        List<BookRequest> surenler = requests.findTarafOlduguByStatus(askida,
+        List<Long> surenIds = requests.findTarafOlduguIdsByStatus(askida,
                 List.of(RequestStatus.FULFILLED, RequestStatus.ARRANGED));
-        for (BookRequest bulunan : surenler) {
+        int kapatilan = 0;
+        for (Long id : surenIds) {
             // Karşı tarafın eşzamanlı teslim onayıyla yarışmasın
-            BookRequest r = requests.findByIdWithDetailsForUpdate(bulunan.getId()).orElseThrow();
+            BookRequest r = requests.findByIdWithDetailsForUpdate(id).orElseThrow();
             if (r.getStatus() != RequestStatus.FULFILLED && r.getStatus() != RequestStatus.ARRANGED) continue;
+            kapatilan++;
             boolean bulusmaVardi = r.getMeeting().isArranged();
             String kitap = r.getBook().getTitle();
             User karsilayan = r.getFulfilledBy();
@@ -339,13 +361,13 @@ public class RequestService {
                             "/karsiladiklarim");
             }
         }
-        return surenler.size();
+        return kapatilan;
     }
 
     /** İsteği açan teslim aldı. */
     @Transactional
     public void deliver(Long requestId, User requester) {
-        BookRequest r = ownRequest(requestId, requester);
+        BookRequest r = ownRequestForUpdate(requestId, requester);
         if (r.getStatus() != RequestStatus.FULFILLED && r.getStatus() != RequestStatus.SHIPPED
                 && r.getStatus() != RequestStatus.ARRANGED)
             throw new IllegalStateException("Bu istek teslim aşamasında değil.");
@@ -395,8 +417,16 @@ public class RequestService {
         return r;
     }
 
-    private BookRequest ownFulfilled(Long id, User user) {
-        BookRequest r = requests.findByIdWithDetails(id)
+    private BookRequest ownRequestForUpdate(Long id, User user) {
+        BookRequest r = requests.findByIdWithDetailsForUpdate(id)
+                .orElseThrow(() -> new IllegalStateException("İstek bulunamadı."));
+        if (!r.getStudent().getId().equals(user.getId()))
+            throw new IllegalStateException("Bu istek sana ait değil.");
+        return r;
+    }
+
+    private BookRequest ownFulfilledForUpdate(Long id, User user) {
+        BookRequest r = requests.findByIdWithDetailsForUpdate(id)
                 .orElseThrow(() -> new IllegalStateException("İstek bulunamadı."));
         if (r.getFulfilledBy() == null || !r.getFulfilledBy().getId().equals(user.getId()))
             throw new IllegalStateException("Bu isteği sen karşılamadın.");

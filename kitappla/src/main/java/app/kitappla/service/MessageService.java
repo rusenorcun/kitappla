@@ -66,8 +66,8 @@ public class MessageService {
             case CLAIM -> {
                 Claim c = claims.findByIdWithDetails(refId)
                         .orElseThrow(() -> new IllegalStateException("Kayıt bulunamadı."));
-                // Askı nedeniyle iptal edilen talebin sohbeti arşivlenir; yenisi açılmamalı
-                if (c.getStatus() == ClaimStatus.CANCELLED)
+                // Askı veya gelinmedi nedeniyle kapanan talebin sohbeti arşivlenir; yenisi açılmamalı
+                if (c.getStatus() == ClaimStatus.CANCELLED || c.getStatus() == ClaimStatus.NO_SHOW)
                     throw new IllegalStateException("İptal edilmiş talep için mesajlaşma açılamaz.");
                 return dogrula(c.getDonation().getDonor(), c.getStudent(), me);
             }
@@ -76,7 +76,7 @@ public class MessageService {
                         .orElseThrow(() -> new IllegalStateException("İstek bulunamadı."));
                 if (r.getFulfilledBy() == null)
                     throw new IllegalStateException("Bu isteği henüz kimse karşılamadı.");
-                if (r.getStatus() == RequestStatus.CANCELLED)
+                if (r.getStatus() == RequestStatus.CANCELLED || r.getStatus() == RequestStatus.NO_SHOW)
                     throw new IllegalStateException("İptal edilmiş istek için mesajlaşma açılamaz.");
                 return dogrula(r.getStudent(), r.getFulfilledBy(), me);
             }
@@ -158,18 +158,24 @@ public class MessageService {
     }
 
     private boolean checkAccess(Conversation c, User me) {
+        return checkAccess(c, me, null);
+    }
+
+    private boolean checkAccess(Conversation c, User me, Boolean cachedIsAdmin) {
         if (c.getKind() == ConversationKind.REPORT) {
             Report report = reports.findByIdWithUsers(c.getRefId())
                     .orElseThrow(() -> new IllegalStateException("Şikâyet bulunamadı."));
             boolean reporter = report.getReporter().getId().equals(me.getId());
-            if (!reporter && !currentAdmin(me))
+            boolean isAdmin = cachedIsAdmin != null ? cachedIsAdmin : currentAdmin(me);
+            if (!reporter && !isAdmin)
                 throw new IllegalStateException("Bu sohbet sana ait değil.");
             return reporter;
         }
         if (c.getKind() == ConversationKind.SUPPORT) {
             // Üye her zaman userA'dır; yönetici tarafı (userB damgası) güncel role göre belirlenir
             boolean uye = c.getUserA().getId().equals(me.getId());
-            if (!uye && !currentAdmin(me))
+            boolean isAdmin = cachedIsAdmin != null ? cachedIsAdmin : currentAdmin(me);
+            if (!uye && !isAdmin)
                 throw new IllegalStateException("Bu sohbet sana ait değil.");
             return uye;
         }
@@ -213,7 +219,10 @@ public class MessageService {
     /** Sohbet başına okunmamış sayıları tek sorguda ({@link #unread} ile aynı kural). Listedeki her sohbet için değer vardır. */
     public Map<Long, Long> unreadCounts(List<Conversation> list, User me) {
         if (list.isEmpty()) return Map.of();
-        list.forEach(c -> checkAccess(c, me));
+        Boolean isAdmin = list.stream().anyMatch(Conversation::isYonetimSohbeti) ? currentAdmin(me) : null;
+        for (Conversation c : list) {
+            checkAccess(c, me, isAdmin);
+        }
         List<Long> ids = list.stream().map(Conversation::getId).toList();
         Map<Long, Long> adetler = messages.countUnreadByConversation(ids, me).stream()
                 .collect(Collectors.toMap(MessageRepository.OkunmamisAdet::getConversationId,
@@ -233,7 +242,8 @@ public class MessageService {
 
     @Transactional
     public void markRead(Conversation c, User me) {
-        Conversation stored = require(c.getId(), me);
+        Conversation stored = conversations.findByIdWithUsers(c.getId())
+                .orElseThrow(() -> new IllegalStateException("Sohbet bulunamadı."));
         boolean sideA = checkAccess(stored, me);
         Instant now = Instant.now();
         if (sideA) {
@@ -251,7 +261,9 @@ public class MessageService {
 
     @Transactional
     public Message send(Long conversationId, User me, String body) {
-        Conversation c = require(conversationId, me);
+        Conversation c = conversations.findByIdWithUsers(conversationId)
+                .orElseThrow(() -> new IllegalStateException("Sohbet bulunamadı."));
+        boolean sideA = checkAccess(c, me);
         if (c.isArchived()) throw new IllegalStateException("Bu sohbet arşivlendi.");
 
         String metin = body == null ? null : body.trim();
@@ -268,7 +280,6 @@ public class MessageService {
 
         c.setLastMessage(metin.length() > 200 ? metin.substring(0, 200) : metin);
         c.setLastMessageAt(m.getCreatedAt());
-        boolean sideA = checkAccess(c, me);
         if (sideA) c.setLastReadA(m.getCreatedAt());
         else c.setLastReadB(m.getCreatedAt());
         conversations.save(c);
@@ -282,7 +293,8 @@ public class MessageService {
         User recipient;
         String senderName;
         if (c.getKind() == ConversationKind.REPORT) {
-            recipient = sideA ? users.findFirstByAdminTrueOrderByIdAsc().orElse(null)
+            recipient = sideA
+                    ? (currentAdmin(c.getUserB()) ? c.getUserB() : users.findFirstByAdminTrueOrderByIdAsc().orElse(null))
                     : reports.findByIdWithUsers(c.getRefId()).orElseThrow().getReporter();
             senderName = sideA ? me.getName() : marka.destekAdi() + " / Yönetim";
         } else if (c.getKind() == ConversationKind.SUPPORT) {

@@ -242,7 +242,7 @@ public final class ApiDtoMapper {
 
     public static OfferDto toOfferDto(SwapOffer offer, User me, Long conversationId, boolean addressVisible) {
         if (offer == null) return null;
-        boolean isOutgoing = offer.getFromUser() != null && offer.getFromUser().getId().equals(me.getId());
+        boolean isOutgoing = me != null && offer.getFromUser() != null && offer.getFromUser().getId().equals(me.getId());
         User counterpart = isOutgoing ? offer.getToUser() : offer.getFromUser();
         Book takeBook = isOutgoing ? (offer.getTargetSwapBook() != null ? offer.getTargetSwapBook().getBook() : null)
                                    : (offer.getOfferedSwapBook() != null ? offer.getOfferedSwapBook().getBook() : null);
@@ -285,7 +285,7 @@ public final class ApiDtoMapper {
     public static ConversationDto toConversationDto(Conversation conversation, User me, long unread,
                                                     String destekAdi, String destekKisaltma) {
         if (conversation == null) return null;
-        User counterpart = conversation.other(me);
+        User counterpart = me != null ? conversation.other(me) : null;
         String title = switch (conversation.getKind()) {
             case CLAIM -> "Bağış Talebi";
             case REQUEST -> "Kitap İsteği";
@@ -295,7 +295,7 @@ public final class ApiDtoMapper {
         };
         String counterpartName = counterpart != null ? counterpart.getName() : null;
         String counterpartInitials = counterpart != null ? counterpart.getInitials() : null;
-        if (conversation.isYonetimSohbeti() && !me.isAdmin()) {
+        if (conversation.isYonetimSohbeti() && (me == null || !me.isAdmin())) {
             counterpartName = destekAdi;
             counterpartInitials = destekKisaltma;
         }
@@ -367,7 +367,7 @@ public final class ApiDtoMapper {
      */
     public static ChatMessageDto toChatMessageDto(Message message, User me, boolean maskSenderName, String destekAdi) {
         if (message == null) return null;
-        boolean mine = message.getSender() != null && message.getSender().getId().equals(me.getId());
+        boolean mine = me != null && message.getSender() != null && message.getSender().getId().equals(me.getId());
         String senderName = message.getSender() != null ? message.getSender().getName() : null;
         if (maskSenderName && !mine) senderName = destekAdi;
         return new ChatMessageDto(

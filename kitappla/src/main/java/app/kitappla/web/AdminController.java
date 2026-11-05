@@ -44,16 +44,29 @@ public class AdminController {
         this.monitorService = monitorService;
     }
 
+    private static boolean rozetGereksiz(HttpServletRequest request) {
+        if (request == null) return false;
+        String m = request.getMethod();
+        if (m != null && !"GET".equalsIgnoreCase(m) && !"HEAD".equalsIgnoreCase(m)) return true;
+        String yol = request.getRequestURI();
+        if (yol == null) return false;
+        String ctx = request.getContextPath();
+        if (ctx != null && !ctx.isEmpty() && yol.startsWith(ctx)) {
+            yol = yol.substring(ctx.length());
+        }
+        return yol.equals("/admin/izlec/canli") || yol.startsWith("/admin/belge/");
+    }
+
     /** Alt navigasyondaki bekleyen belge rozeti her yönetim sayfasında görünür. */
     @ModelAttribute("bekleyenSayisi")
-    public long bekleyenSayisi() {
-        return admin.pendingDocumentCount();
+    public long bekleyenSayisi(HttpServletRequest request) {
+        return rozetGereksiz(request) ? 0 : admin.pendingDocumentCount();
     }
 
     /** Açık şikâyet rozeti. */
     @ModelAttribute("sikayetSayisi")
-    public long sikayetSayisi() {
-        return reports.openCount();
+    public long sikayetSayisi(HttpServletRequest request) {
+        return rozetGereksiz(request) ? 0 : reports.openCount();
     }
 
     @GetMapping

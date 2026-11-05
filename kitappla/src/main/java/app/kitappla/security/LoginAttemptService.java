@@ -116,6 +116,10 @@ public class LoginAttemptService {
             while (!hits.isEmpty() && hits.peekFirst().isBefore(limit)) {
                 hits.pollFirst();
             }
+            if (hits.isEmpty()) {
+                failures.invalidate(k);
+                return false;
+            }
             return hits.size() >= max;
         }
     }

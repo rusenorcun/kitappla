@@ -30,6 +30,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findTop200ByNameContainingIgnoreCaseOrEmailContainingIgnoreCaseOrderByCreatedAtDesc(String name, String email);
     long countByAdminTrue();
 
+    /** Ana sayfadaki üye sayısı: yalnızca e-posta adresini doğrulamış kullanıcılar. */
+    long countByEmailVerifiedTrue();
+
     /** Şikâyet bildirimi gönderilecek yöneticiler (tüm üyeleri okumadan). */
     List<User> findByAdminTrue();
 

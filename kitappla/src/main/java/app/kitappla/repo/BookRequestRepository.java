@@ -112,6 +112,7 @@ public interface BookRequestRepository extends JpaRepository<BookRequest, Long> 
     long countByFulfilledBy(User fulfilledBy);
     long countByStatus(RequestStatus status);
     long countByStudentAndStatus(User student, RequestStatus status);
+    boolean existsByStudentAndBookAndStatus(User student, app.kitappla.domain.Book book, RequestStatus status);
 
     /** Üyenin isteyen ya da karşılayan olarak taraf olduğu, verilen durumlardaki istekler (askıya alma için). */
     @Query("""
@@ -121,6 +122,10 @@ public interface BookRequestRepository extends JpaRepository<BookRequest, Long> 
            """)
     List<BookRequest> findTarafOlduguByStatus(@Param("uye") User uye,
                                               @Param("durumlar") java.util.Collection<RequestStatus> durumlar);
+
+    @Query("select r.id from BookRequest r where (r.student = :uye or r.fulfilledBy = :uye) and r.status in :durumlar")
+    List<Long> findTarafOlduguIdsByStatus(@Param("uye") User uye,
+                                          @Param("durumlar") java.util.Collection<RequestStatus> durumlar);
 
     /** Pano: isteyen ya da karşılayan olarak süren istekler. */
     long countByStudentAndStatusIn(User student, java.util.Collection<RequestStatus> statuses);

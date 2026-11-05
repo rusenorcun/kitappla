@@ -73,6 +73,15 @@ public interface SwapBookRepository extends JpaRepository<SwapBook, Long> {
     @Query("select s from SwapBook s where s.id = :id")
     Optional<SwapBook> findByIdForUpdate(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+           select s from SwapBook s
+           join fetch s.book
+           join fetch s.user
+           where s.id = :id
+           """)
+    Optional<SwapBook> findByIdWithDetailsForUpdate(@Param("id") Long id);
+
     @Query("""
            select s from SwapBook s
            join fetch s.book

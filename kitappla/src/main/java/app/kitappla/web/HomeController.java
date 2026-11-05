@@ -40,7 +40,7 @@ public class HomeController {
                 "donations", donations.count(),
                 "delivered", delivered,
                 "swaps", offers.countByStatus(OfferStatus.COMPLETED),
-                "members", users.count()
+                "members", users.countByEmailVerifiedTrue()
         ));
         return "index";
     }

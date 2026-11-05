@@ -54,7 +54,8 @@ public class ProfileApiController {
 
         School school = School.of(body.school());
 
-        User updated = userService.updateProfile(user, body.name(), body.address(), body.phone(), school);
+        User updated = userService.updateProfile(
+                user, body.name(), features.isAddress() ? body.address() : null, body.phone(), school);
         return ResponseEntity.ok(ApiDtoMapper.toUserDto(updated));
     }
 

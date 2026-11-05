@@ -51,9 +51,10 @@ class ProfileAndAccountContractTest extends ContractTestBase {
     }
 
     @Test
-    @DisplayName("POST /api/v1/me/password - Doğru mevcut şifreyle şifreyi değiştirir (204 No Content)")
+    @DisplayName("POST /api/v1/me/password - Doğru mevcut şifreyle şifreyi değiştirir, mevcut oturumu korur ve diğer oturumları düşürür")
     void changePassword_success_returns204() throws Exception {
         AuthUser user = registerNewUser("Şifre Değişen", "chg-pwd");
+        MockHttpSession otherSession = loginUser(user.email(), user.password());
 
         Map<String, String> body = Map.of(
                 "currentPassword", user.password(),
@@ -63,6 +64,14 @@ class ProfileAndAccountContractTest extends ContractTestBase {
 
         MvcResult res = apiPost("/api/v1/me/password", body, user.session());
         assertThat(res.getResponse().getStatus()).isEqualTo(204);
+
+        // Mevcut oturum açık kalmalıdır
+        MvcResult meRes = apiGet("/api/v1/me", user.session());
+        assertThat(meRes.getResponse().getStatus()).isEqualTo(200);
+
+        // Diğer cihaz/tarayıcı oturumu düşürülmelidir
+        MvcResult otherRes = apiGet("/api/v1/me", otherSession);
+        assertThat(otherRes.getResponse().getStatus()).isEqualTo(401);
 
         // Yeni şifreyle giriş yapılabilmelidir
         MockHttpSession newSession = loginUser(user.email(), "yeniSifre123");

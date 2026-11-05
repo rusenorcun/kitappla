@@ -101,7 +101,6 @@ public class AdminMonitorService {
         }
 
         long onlineUsersCount = uniqueUserIds.size();
-        long persistentLogins = getPersistentLoginCount();
 
         // JVM & Çalışma Zamanı
         Runtime rt = Runtime.getRuntime();
@@ -121,6 +120,7 @@ public class AdminMonitorService {
         int cpus = rt.availableProcessors();
 
         DbInfo db = getDbInfo();
+        long persistentLogins = db.persistentLogins();
         long failureCount = loginAttemptService.trackedFailureCount();
 
         return new MonitorSummaryDto(
@@ -154,6 +154,7 @@ public class AdminMonitorService {
         List<Object> principals = sessionRegistry.getAllPrincipals();
         record SessionEntry(SessionInformation session, User user, Object principal) {}
         List<SessionEntry> entries = new ArrayList<>();
+        Set<String> activeSessionIds = new HashSet<>();
 
         for (Object principal : principals) {
             List<SessionInformation> sessions = sessionRegistry.getAllSessions(principal, false);
@@ -163,9 +164,11 @@ public class AdminMonitorService {
             for (SessionInformation session : sessions) {
                 if (!session.isExpired()) {
                     entries.add(new SessionEntry(session, user, principal));
+                    activeSessionIds.add(session.getSessionId());
                 }
             }
         }
+        sessionTokenService.retainActive(activeSessionIds);
 
         // Son istek tarihine göre en yeniden eskiye doğru sırala
         entries.sort((a, b) -> {
@@ -292,17 +295,30 @@ public class AdminMonitorService {
         return days + " gün önce";
     }
 
-    private record DbInfo(boolean connected, String product, Integer active, Integer idle) {}
+    private volatile String cachedDbProduct;
+
+    private record DbInfo(boolean connected, String product, Integer active, Integer idle, long persistentLogins) {}
 
     private DbInfo getDbInfo() {
         boolean connected = false;
-        String product = "Bilinmiyor";
+        String product = cachedDbProduct != null ? cachedDbProduct : "Bilinmiyor";
         Integer active = null;
         Integer idle = null;
+        long persistentLogins = 0;
         try (var conn = dataSource.getConnection()) {
             connected = conn.isValid(1);
-            var md = conn.getMetaData();
-            product = md.getDatabaseProductName() + " " + md.getDatabaseProductVersion();
+            if (cachedDbProduct == null) {
+                var md = conn.getMetaData();
+                product = md.getDatabaseProductName() + " " + md.getDatabaseProductVersion();
+                cachedDbProduct = product;
+            }
+            try (var stmt = conn.createStatement();
+                 var rs = stmt.executeQuery("SELECT COUNT(*) FROM persistent_logins")) {
+                if (rs.next()) {
+                    persistentLogins = rs.getLong(1);
+                }
+            } catch (Exception ignored) {
+            }
         } catch (Exception e) {
             connected = false;
         }
@@ -316,6 +332,6 @@ public class AdminMonitorService {
                 } catch (Exception ignored) {}
             }
         }
-        return new DbInfo(connected, product, active, idle);
+        return new DbInfo(connected, product, active, idle, persistentLogins);
     }
 }

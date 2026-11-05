@@ -93,10 +93,11 @@ public class CoverService {
         if (file.getSize() > MAX_BYTES) {
             throw new IllegalArgumentException("Kapak görseli en fazla 3 MB olabilir.");
         }
+        Path hedef = null;
         try {
             Files.createDirectories(dir);
             String name = UUID.randomUUID() + UZANTI.get(type);
-            Path hedef = dir.resolve(name).toAbsolutePath();
+            hedef = dir.resolve(name).toAbsolutePath();
             file.transferTo(hedef);
             if (!gercektenGorsel(hedef)) {
                 Files.deleteIfExists(hedef);
@@ -109,6 +110,9 @@ public class CoverService {
             kucult(dir.resolve(name));
             return "/uploads/covers/" + name;
         } catch (IOException e) {
+            if (hedef != null) {
+                try { Files.deleteIfExists(hedef); } catch (IOException ignored) {}
+            }
             throw new IllegalArgumentException("Kapak görseli kaydedilemedi.");
         }
     }
@@ -209,11 +213,14 @@ public class CoverService {
                 long yazilan;
                 try (InputStream in = c.getInputStream()) {
                     yazilan = Files.copy(sinirli(in), hedef);
+                } catch (Exception copyEx) {
+                    Files.deleteIfExists(hedef);
+                    throw copyEx;
                 } finally {
                     c.disconnect();
                 }
                 // Uzak sunucunun bildirdiği tür de kendi seçtiği bir değerdir; baytlara bakılır.
-                if (yazilan <= 0 || yazilan >= MAX_BYTES || !gercektenGorsel(hedef) || !boyutUygun(hedef)) {
+                if (yazilan <= 0 || yazilan > MAX_BYTES || !gercektenGorsel(hedef) || !boyutUygun(hedef)) {
                     Files.deleteIfExists(hedef);
                     return url;
                 }
@@ -279,12 +286,13 @@ public class CoverService {
 
     /** Boyut sınırını aşan gövdeyi okumayı bırakır; kötü niyetli/dev dosyaya karşı. */
     private static InputStream sinirli(InputStream in) {
+        final long limit = MAX_BYTES + 1;
         return new InputStream() {
             private long okunan;
 
             @Override
             public int read() throws IOException {
-                if (okunan >= MAX_BYTES) return -1;
+                if (okunan >= limit) return -1;
                 int b = in.read();
                 if (b >= 0) okunan++;
                 return b;
@@ -292,8 +300,8 @@ public class CoverService {
 
             @Override
             public int read(byte[] buf, int off, int len) throws IOException {
-                if (okunan >= MAX_BYTES) return -1;
-                int kalan = (int) Math.min(len, MAX_BYTES - okunan);
+                if (okunan >= limit) return -1;
+                int kalan = (int) Math.min(len, limit - okunan);
                 int n = in.read(buf, off, kalan);
                 if (n > 0) okunan += n;
                 return n;

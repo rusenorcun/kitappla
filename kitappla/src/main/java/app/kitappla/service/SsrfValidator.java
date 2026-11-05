@@ -69,6 +69,12 @@ public final class SsrfValidator {
         }
 
         String hostLower = host.toLowerCase(Locale.ROOT);
+        while (hostLower.endsWith(".")) {
+            hostLower = hostLower.substring(0, hostLower.length() - 1);
+        }
+        if (hostLower.isEmpty()) {
+            return false;
+        }
         for (String suffix : BLOCKED_HOST_SUFFIXES) {
             if (hostLower.equals(suffix) || hostLower.endsWith(suffix.startsWith(".") ? suffix : "." + suffix)) {
                 log.warn("SSRF engellendi (yasaklı host): {}", host);

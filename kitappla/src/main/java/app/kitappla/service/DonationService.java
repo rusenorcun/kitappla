@@ -81,7 +81,7 @@ public class DonationService {
     }
 
     /** Görünümleri kurar; kalan adetler bağış başına değil, tek sorguda hesaplanır. */
-    private List<DonationView> toViews(List<Donation> list) {
+    List<DonationView> toViews(List<Donation> list) {
         if (list.isEmpty()) return List.of();
         List<Long> ids = list.stream().map(Donation::getId).toList();
         Map<Long, Long> alinan = claims.countActiveByDonationIds(ids).stream()
@@ -206,9 +206,14 @@ public class DonationService {
         long taken = claims.countByDonationAndStatusNotIn(d, ClaimStatus.ADET_TUTMAYAN);
         if (taken >= d.getQuantity()) throw new IllegalStateException("Bu bağışta kalan kitap yok.");
 
-        Claim c = new Claim();
+        Claim c = claims.findByDonationAndStudent(d, user).orElseGet(Claim::new);
         c.setDonation(d);
         c.setStudent(user);
+        c.setStatus(ClaimStatus.MATCHED);
+        c.setCreatedAt(Instant.now());
+        c.setMeeting(new Meeting());
+        c.setShippedAt(null);
+        c.setDeliveredAt(null);
         c = claims.save(c);
 
         if (taken + 1 >= d.getQuantity()) {
@@ -247,7 +252,7 @@ public class DonationService {
         d.setBook(book);
         d.setQuantity(quantity);
         d.setTargetLevel(level == null ? TargetLevel.HEPSI : level);
-        d.setSource(source == null ? DonationSource.PURCHASE : source);
+        d.setSource(source != null ? source : (features.isPurchase() ? DonationSource.PURCHASE : DonationSource.OWN));
         d.setDescription(Metin.kisalt(description, 500));
 
         // Kampüs içi teslimde bağışçı bir nokta önerir; taraflar sonra değiştirebilir
@@ -353,7 +358,7 @@ public class DonationService {
     /** Bağışçı kargoya verdi. Yalnızca kargo akışı açıkken kullanılır. */
     @Transactional
     public void ship(Long claimId, User donor) {
-        Claim c = claimOfDonor(claimId, donor);
+        Claim c = claimOfDonorForUpdate(claimId, donor);
         if (!features.isShipping())
             throw new IllegalStateException("Kargo akışı kapalı; teslim kampüste yüz yüze yapılır.");
         if (c.getStatus() != ClaimStatus.MATCHED)
@@ -373,7 +378,7 @@ public class DonationService {
      */
     @Transactional
     public Claim arrange(Long claimId, User user, MeetingRequest request) {
-        Claim c = claims.findByIdWithDetails(claimId)
+        Claim c = claims.findByIdWithDetailsForUpdate(claimId)
                 .orElseThrow(() -> new IllegalStateException("Kayıt bulunamadı."));
 
         boolean bagisci = c.getDonation().getDonor().getId().equals(user.getId());
@@ -382,6 +387,8 @@ public class DonationService {
             throw new IllegalStateException("Bu kayıt sana ait değil.");
         if (c.getStatus() == ClaimStatus.DELIVERED)
             throw new IllegalStateException("Bu kitap zaten teslim edildi.");
+        if (c.getStatus() == ClaimStatus.SHIPPED)
+            throw new IllegalStateException("Kargoya verilmiş kayıt için buluşma ayarlanamaz.");
         // Gelinmedi bildirimi slotu serbest bırakıp bağışı yeniden açar; kayıt buradan
         // diriltilirse aynı kitap hem yeni alıcıya hem eskisine ayrılmış olur (adet aşımı).
         if (c.getStatus() == ClaimStatus.NO_SHOW)
@@ -410,7 +417,7 @@ public class DonationService {
      */
     @Transactional
     public Claim noShow(Long claimId, User bildiren) {
-        Claim c = claims.findByIdWithDetails(claimId)
+        Claim c = claims.findByIdWithDetailsForUpdate(claimId)
                 .orElseThrow(() -> new IllegalStateException("Kayıt bulunamadı."));
 
         boolean bagisci = c.getDonation().getDonor().getId().equals(bildiren.getId());
@@ -419,6 +426,8 @@ public class DonationService {
 
         if (c.getStatus() == ClaimStatus.DELIVERED)
             throw new IllegalStateException("Bu kitap zaten teslim edilmiş.");
+        if (c.getStatus() == ClaimStatus.SHIPPED)
+            throw new IllegalStateException("Kargoya verilmiş kayıt için gelinmedi bildirilemez.");
         if (c.getStatus() == ClaimStatus.NO_SHOW)
             throw new IllegalStateException("Bu kayıt zaten gelinmedi olarak işaretlenmiş.");
         if (c.getStatus() == ClaimStatus.CANCELLED)
@@ -428,7 +437,8 @@ public class DonationService {
         if (c.getMeeting().getAt() != null && Instant.now().isBefore(c.getMeeting().getAt()))
             throw new IllegalStateException("Buluşma saati daha gelmedi.");
 
-        Donation d = c.getDonation();
+        Donation d = donations.findByIdWithDetailsForUpdate(c.getDonation().getId())
+                .orElse(c.getDonation());
         boolean doluydu = dolduguIcinKapali(d);
         c.setStatus(ClaimStatus.NO_SHOW);
         claims.save(c);
@@ -442,11 +452,12 @@ public class DonationService {
             donations.save(d);
         }
 
-        User gelmeyen = bagisci ? c.getStudent() : c.getDonation().getDonor();
+        User karsi = bagisci ? c.getStudent() : d.getDonor();
+        User gelmeyen = users.findByIdForUpdate(karsi.getId()).orElse(karsi);
         gelmeyen.setNoShowCount(gelmeyen.getNoShowCount() + 1);
         users.save(gelmeyen);
 
-        String kitap = c.getDonation().getBook().getTitle();
+        String kitap = d.getBook().getTitle();
         notifications.notify(gelmeyen, "gelmedi",
                 "\"" + kitap + "\" buluşmasına gelmediğin bildirildi. "
                         + "Tekrarlanırsa hesabın askıya alınabilir.",
@@ -460,7 +471,7 @@ public class DonationService {
     /** Alıcı teslim aldı. */
     @Transactional
     public void deliver(Long claimId, User receiver) {
-        Claim c = claimOfReceiver(claimId, receiver);
+        Claim c = claimOfReceiverForUpdate(claimId, receiver);
         if (c.getStatus() == ClaimStatus.DELIVERED)
             throw new IllegalStateException("Bu kitabı zaten teslim aldın.");
         if (c.getStatus() == ClaimStatus.NO_SHOW)
@@ -490,13 +501,14 @@ public class DonationService {
                 "/bagislarim");
     }
 
-    /** Alıcı, kargolanmadan önce talebini iptal eder; adet geri açılır. */
+    /** Alıcı, kargolanmadan ya da teslim alınmadan önce talebini iptal eder; adet geri açılır. */
     @Transactional
     public void cancelClaim(Long claimId, User receiver) {
-        Claim c = claimOfReceiver(claimId, receiver);
-        if (c.getStatus() != ClaimStatus.MATCHED)
+        Claim c = claimOfReceiverForUpdate(claimId, receiver);
+        if (c.getStatus() != ClaimStatus.MATCHED && c.getStatus() != ClaimStatus.ARRANGED)
             throw new IllegalStateException("Kargolanmış ya da teslim edilmiş bir talep iptal edilemez.");
-        Donation d = c.getDonation();
+        Donation d = donations.findByIdWithDetailsForUpdate(c.getDonation().getId())
+                .orElse(c.getDonation());
         boolean doluydu = dolduguIcinKapali(d);
         conversations.findByKindAndRefId(ConversationKind.CLAIM, claimId).ifPresent(k -> {
             k.archive();
@@ -524,9 +536,13 @@ public class DonationService {
      */
     @Transactional
     public int askiyaAlinanUyeninTalepleriniIptalEt(User askida) {
-        List<Claim> surenler = claims.findTarafOlduguByStatus(askida,
+        List<Long> surenIds = claims.findTarafOlduguIdsByStatus(askida,
                 List.of(ClaimStatus.MATCHED, ClaimStatus.ARRANGED));
-        for (Claim c : surenler) {
+        int iptal = 0;
+        for (Long id : surenIds) {
+            Claim c = claims.findByIdWithDetailsForUpdate(id).orElseThrow();
+            if (c.getStatus() != ClaimStatus.MATCHED && c.getStatus() != ClaimStatus.ARRANGED) continue;
+            iptal++;
             // Adet hesabı eşzamanlı bir talep/iptal ile yarışmasın
             Donation d = donations.findByIdWithDetailsForUpdate(c.getDonation().getId()).orElseThrow();
             boolean doluydu = dolduguIcinKapali(d);
@@ -537,6 +553,10 @@ public class DonationService {
                 k.archive();
                 conversations.save(k);
             });
+            if (doluydu) {
+                d.setStatus(DonationStatus.OPEN);
+                donations.save(d);
+            }
 
             String kitap = d.getBook().getTitle();
             if (d.getDonor().getId().equals(askida.getId())) {
@@ -544,17 +564,13 @@ public class DonationService {
                         AskiBildirimi.metin(kitap, bulusmaVardi, "talebin", true, null),
                         "/aldiklarim");
             } else {
-                if (doluydu) {
-                    d.setStatus(DonationStatus.OPEN);
-                    donations.save(d);
-                }
                 notifications.notify(d.getDonor(), AskiBildirimi.TUR,
                         AskiBildirimi.metin(kitap, bulusmaVardi, "talep", true,
                                 doluydu ? "Kitap yeniden bağışa açıldı." : "Ayrılan kitap bağışına geri döndü."),
                         "/bagislarim");
             }
         }
-        return surenler.size();
+        return iptal;
     }
 
     /**
@@ -566,8 +582,8 @@ public class DonationService {
                 && claims.countByDonationAndStatusNotIn(d, ClaimStatus.ADET_TUTMAYAN) >= d.getQuantity();
     }
 
-    private Claim claimOfDonor(Long claimId, User donor) {
-        Claim c = claims.findByIdWithDetails(claimId)
+    private Claim claimOfDonorForUpdate(Long claimId, User donor) {
+        Claim c = claims.findByIdWithDetailsForUpdate(claimId)
                 .orElseThrow(() -> new IllegalStateException("Teslimat kaydı bulunamadı."));
         if (!c.getDonation().getDonor().getId().equals(donor.getId()))
             throw new IllegalStateException("Bu teslimat kaydı sana ait değil.");
@@ -576,6 +592,14 @@ public class DonationService {
 
     private Claim claimOfReceiver(Long claimId, User receiver) {
         Claim c = claims.findByIdWithDetails(claimId)
+                .orElseThrow(() -> new IllegalStateException("Teslimat kaydı bulunamadı."));
+        if (!c.getStudent().getId().equals(receiver.getId()))
+            throw new IllegalStateException("Bu teslimat kaydı sana ait değil.");
+        return c;
+    }
+
+    private Claim claimOfReceiverForUpdate(Long claimId, User receiver) {
+        Claim c = claims.findByIdWithDetailsForUpdate(claimId)
                 .orElseThrow(() -> new IllegalStateException("Teslimat kaydı bulunamadı."));
         if (!c.getStudent().getId().equals(receiver.getId()))
             throw new IllegalStateException("Bu teslimat kaydı sana ait değil.");

@@ -35,9 +35,12 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
            """)
     List<AlinanAdet> countActiveByDonationIds(@Param("donationIds") Collection<Long> donationIds);
 
-    /** Kişinin talep ettiği bağışların kimlikleri (listede "zaten aldın" kontrolü için). */
-    @Query("select c.donation.id from Claim c where c.student = :student")
+    /** Kişinin talep ettiği bağışların kimlikleri (listede "zaten aldın" kontrolü için; iptal edilenler hariç). */
+    @Query("select c.donation.id from Claim c where c.student = :student and c.status <> app.kitappla.domain.ClaimStatus.CANCELLED")
     Set<Long> findDonationIdsByStudent(@Param("student") User student);
+
+    Optional<Claim> findByDonationAndStudent(Donation donation, User student);
+
     @Query("""
            select c from Claim c
            join fetch c.donation d
@@ -59,6 +62,18 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
            where c.id = :id
            """)
     Optional<Claim> findByIdWithDetails(@Param("id") Long id);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+           select c from Claim c
+           join fetch c.donation d
+           join fetch d.book
+           join fetch d.donor
+           join fetch c.student
+           left join fetch c.meeting.point
+           where c.id = :id
+           """)
+    Optional<Claim> findByIdWithDetailsForUpdate(@Param("id") Long id);
 
     @Query("""
            select c from Claim c
@@ -107,6 +122,10 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
            where (c.student = :uye or d.donor = :uye) and c.status in :durumlar
            """)
     List<Claim> findTarafOlduguByStatus(@Param("uye") User uye, @Param("durumlar") Collection<ClaimStatus> durumlar);
+
+    @Query("select c.id from Claim c join c.donation d where (c.student = :uye or d.donor = :uye) and c.status in :durumlar")
+    List<Long> findTarafOlduguIdsByStatus(@Param("uye") User uye, @Param("durumlar") Collection<ClaimStatus> durumlar);
+
     long countByStatus(ClaimStatus status);
     long countByStudent(User student);
 

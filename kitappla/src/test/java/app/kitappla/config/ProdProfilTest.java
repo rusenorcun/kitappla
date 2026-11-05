@@ -36,7 +36,7 @@ class ProdProfilTest {
     @Test
     void sablonOnbellegiVeBaglantiHavuzuAyarli() {
         assertThat(prod.getProperty("spring.thymeleaf.cache")).isEqualTo("true");
-        assertThat(prod.getProperty("spring.datasource.hikari.maximum-pool-size")).isEqualTo("20");
+        assertThat(prod.getProperty("spring.datasource.hikari.maximum-pool-size")).isEqualTo("40");
     }
 
     @Test

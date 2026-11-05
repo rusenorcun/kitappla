@@ -255,7 +255,7 @@ public class UserService {
         return users.save(u);
     }
 
-    /** Mevcut şifre doğrulanarak yeni şifre atar. */
+    /** Mevcut şifre doğrulanarak yeni şifre atar; mevcut oturumu koruyup diğer oturumları düşürür. */
     @Transactional
     public void changePassword(User user, String currentPassword, String newPassword, String confirmPassword) {
         User u = users.findById(user.getId())
@@ -270,9 +270,36 @@ public class UserService {
         if (encoder.matches(newPassword, u.getPasswordHash()))
             throw new IllegalStateException("Yeni şifre eskisiyle aynı olamaz.");
 
-        u.setPasswordHash(encoder.encode(newPassword));
+        String newHash = encoder.encode(newPassword);
+        u.setPasswordHash(newHash);
         users.save(u);
-        userSessions.expireUserSessions(u.getId());
+        user.setPasswordHash(newHash);
+
+        String currentSessionId = null;
+        var reqAttrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (reqAttrs instanceof org.springframework.web.context.request.ServletRequestAttributes servletAttrs) {
+            var session = servletAttrs.getRequest().getSession(false);
+            if (session != null) {
+                currentSessionId = session.getId();
+            }
+        }
+
+        var context = org.springframework.security.core.context.SecurityContextHolder.getContext();
+        var auth = context.getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof app.kitappla.security.AppUserDetails details
+                && details.getUser() != null && u.getId().equals(details.getUser().getId())) {
+            details.getUser().setPasswordHash(newHash);
+            var refreshed = new app.kitappla.security.AppUserDetails(u);
+            var newAuth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                    refreshed, auth.getCredentials(), refreshed.getAuthorities());
+            newAuth.setDetails(auth.getDetails());
+            context.setAuthentication(newAuth);
+        }
+
+        userSessions.expireOtherUserSessions(u.getId(), currentSessionId);
+
+        mail.send(u.getEmail(), "Şifren değiştirildi", "sifre-degisti",
+                Map.of("ad", u.getName()));
     }
 
     @Transactional
@@ -387,8 +414,7 @@ public class UserService {
      */
     @Transactional
     public User applyForStudent(User user, SchoolLevel level, String documentNo, String documentPath) {
-        User u = users.findById(user.getId())
-                .orElseThrow(() -> new IllegalStateException("Kullanıcı bulunamadı."));
+        User u = lockedUser(user);
 
         if (u.getStudentStatus() == StudentStatus.APPROVED)
             throw new IllegalStateException("Zaten onaylı bir öğrencisin.");

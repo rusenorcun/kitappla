@@ -135,13 +135,14 @@ public class RequestController {
                           RedirectAttributes ra) {
         try {
             DonationSource src = (source == null || source.isBlank())
-                    ? DonationSource.PURCHASE : DonationSource.valueOf(source.trim().toUpperCase(java.util.Locale.ROOT));
-            requestService.fulfill(id, principal.getUser(), src);
+                    ? (features.isPurchase() ? DonationSource.PURCHASE : DonationSource.OWN)
+                    : DonationSource.valueOf(source.trim().toUpperCase(java.util.Locale.ROOT));
             if (at != null) {
                 Instant atInstant = at.atZone(ZoneId.systemDefault()).toInstant();
-                requestService.arrange(id, principal.getUser(), new MeetingRequest(pointId, note, atInstant));
+                requestService.fulfill(id, principal.getUser(), src, new MeetingRequest(pointId, note, atInstant));
                 ra.addFlashAttribute("basari", "İsteği karşıladın ve buluşma kaydedildi. Karşı tarafa bildirildi.");
             } else {
+                requestService.fulfill(id, principal.getUser(), src);
                 ra.addFlashAttribute("basari", features.isShipping()
                         ? "İsteği karşıladın. Teslimat adresi aşağıda; kargoladığında işaretle."
                         : "İsteği karşıladın. Buluşma yeri ve saatini belirleyip karşı tarafa bildirebilirsin.");

@@ -132,6 +132,10 @@ public class SwapService {
                 bekleyen.setStatus(OfferStatus.REJECTED);
                 bekleyen.setDecidedAt(Instant.now());
                 offers.save(bekleyen);
+                conversations.findByKindAndRefId(ConversationKind.SWAP, bekleyen.getId()).ifPresent(k -> {
+                    k.archive();
+                    conversations.save(k);
+                });
                 User bilgilendirilecek = bekleyen.getFromUser().getId().equals(user.getId())
                         ? bekleyen.getToUser() : bekleyen.getFromUser();
                 notifications.notify(bilgilendirilecek, "swap_rejected",
@@ -269,7 +273,7 @@ public class SwapService {
                 .sorted()
                 .forEach(swapBooks::findByIdForUpdate);
 
-        SwapOffer o = offers.findByIdWithDetails(offerId)
+        SwapOffer o = offers.findByIdWithDetailsForUpdate(offerId)
                 .orElseThrow(() -> new IllegalStateException("Teklif bulunamadı."));
         if (!o.getToUser().getId().equals(me.getId()))
             throw new IllegalStateException("Bu teklif sana gelmedi.");
@@ -296,6 +300,10 @@ public class SwapService {
             other.setStatus(OfferStatus.REJECTED);
             other.setDecidedAt(Instant.now());
             offers.save(other);
+            conversations.findByKindAndRefId(ConversationKind.SWAP, other.getId()).ifPresent(k -> {
+                k.archive();
+                conversations.save(k);
+            });
             notifications.notify(other.getFromUser(), "swap_rejected",
                     "Takas teklifin reddedildi: \"" + other.getTargetSwapBook().getBook().getTitle() + "\" başka biriyle takaslandı.",
                     "/takas/takaslarim");
@@ -317,6 +325,10 @@ public class SwapService {
         o.setStatus(OfferStatus.REJECTED);
         o.setDecidedAt(Instant.now());
         offers.save(o);
+        conversations.findByKindAndRefId(ConversationKind.SWAP, o.getId()).ifPresent(k -> {
+            k.archive();
+            conversations.save(k);
+        });
         notifications.notify(o.getFromUser(), "swap_rejected",
                 "Takas teklifin reddedildi: \"" + o.getTargetSwapBook().getBook().getTitle() + "\".",
                 "/takas/takaslarim");
@@ -331,10 +343,14 @@ public class SwapService {
         o.setStatus(OfferStatus.CANCELLED);
         o.setDecidedAt(Instant.now());
         offers.save(o);
+        conversations.findByKindAndRefId(ConversationKind.SWAP, o.getId()).ifPresent(k -> {
+            k.archive();
+            conversations.save(k);
+        });
     }
 
     private SwapOffer pendingOffer(Long id) {
-        SwapOffer o = offers.findByIdWithDetails(id)
+        SwapOffer o = offers.findByIdWithDetailsForUpdate(id)
                 .orElseThrow(() -> new IllegalStateException("Teklif bulunamadı."));
         if (o.getStatus() != OfferStatus.PENDING)
             throw new IllegalStateException("Bu teklif zaten yanıtlanmış.");
@@ -357,7 +373,7 @@ public class SwapService {
      */
     @Transactional
     public SwapOffer arrange(Long offerId, User me, MeetingRequest request) {
-        SwapOffer o = offers.findByIdWithDetails(offerId)
+        SwapOffer o = offers.findByIdWithDetailsForUpdate(offerId)
                 .orElseThrow(() -> new IllegalStateException("Teklif bulunamadı."));
         if (o.getStatus() != OfferStatus.ACCEPTED)
             throw new IllegalStateException("Yalnızca kabul edilmiş takasta buluşma ayarlanabilir.");
@@ -382,8 +398,7 @@ public class SwapService {
     public void ship(Long offerId, User me) {
         // Elden teslimde iki taraf çoğu zaman aynı anda onaylar: kilitsiz okumada her işlem
         // karşı tarafın damgasını boş görür, takas tamamlanmaz ve son yazan diğerini ezer.
-        offers.findByIdForUpdate(offerId);
-        SwapOffer o = offers.findByIdWithDetails(offerId)
+        SwapOffer o = offers.findByIdWithDetailsForUpdate(offerId)
                 .orElseThrow(() -> new IllegalStateException("Teklif bulunamadı."));
         if (o.getStatus() != OfferStatus.ACCEPTED)
             throw new IllegalStateException("Yalnızca kabul edilmiş takas kargolanabilir.");
@@ -420,14 +435,15 @@ public class SwapService {
     /** Karşı taraf takas buluşmasına gelmedi. Takas iptal olur, kitaplar geri açılır. */
     @Transactional
     public SwapOffer noShow(Long offerId, User bildiren) {
-        offers.findByIdForUpdate(offerId);   // eşzamanlı teslim onayıyla yarışmasın
-        SwapOffer o = offers.findByIdWithDetails(offerId)
+        SwapOffer o = offers.findByIdWithDetailsForUpdate(offerId)
                 .orElseThrow(() -> new IllegalStateException("Teklif bulunamadı."));
         if (o.getStatus() != OfferStatus.ACCEPTED)
             throw new IllegalStateException("Yalnızca kabul edilmiş takasta bildirilebilir.");
         if (!o.getFromUser().getId().equals(bildiren.getId())
                 && !o.getToUser().getId().equals(bildiren.getId()))
             throw new IllegalStateException("Bu takas sana ait değil.");
+        if (o.getFromShippedAt() != null || o.getToShippedAt() != null)
+            throw new IllegalStateException("Taraflardan biri teslimi onayladığı için gelinmedi bildirilemez.");
         if (!o.getMeeting().isArranged())
             throw new IllegalStateException("Önce bir buluşma ayarlanmış olmalı.");
         if (o.getMeeting().getAt() != null && Instant.now().isBefore(o.getMeeting().getAt()))
@@ -441,13 +457,18 @@ public class SwapService {
             conversations.save(k);
         });
 
-        // Kitaplar yeniden takasa açılır
-        o.getOfferedSwapBook().setStatus(SwapBookStatus.OPEN);
-        o.getTargetSwapBook().setStatus(SwapBookStatus.OPEN);
-        swapBooks.save(o.getOfferedSwapBook());
-        swapBooks.save(o.getTargetSwapBook());
+        // Yönetimin kaldırmadığı kitaplar yeniden takasa açılır
+        if (!o.getOfferedSwapBook().isRemovedByAdmin()) {
+            o.getOfferedSwapBook().setStatus(SwapBookStatus.OPEN);
+            swapBooks.save(o.getOfferedSwapBook());
+        }
+        if (!o.getTargetSwapBook().isRemovedByAdmin()) {
+            o.getTargetSwapBook().setStatus(SwapBookStatus.OPEN);
+            swapBooks.save(o.getTargetSwapBook());
+        }
 
-        User gelmeyen = counterpart(o, bildiren);
+        User karsi = counterpart(o, bildiren);
+        User gelmeyen = users.findByIdForUpdate(karsi.getId()).orElse(karsi);
         gelmeyen.setNoShowCount(gelmeyen.getNoShowCount() + 1);
         users.save(gelmeyen);
 
@@ -472,11 +493,12 @@ public class SwapService {
      */
     @Transactional
     public int askiyaAlinanUyeninTakaslariniIptalEt(User askida) {
-        List<SwapOffer> surenler = offers.findTarafOlduguByStatus(askida, LIVE);
-        for (SwapOffer bulunan : surenler) {
-            offers.findByIdForUpdate(bulunan.getId());   // eşzamanlı teslim onayıyla yarışmasın
-            SwapOffer o = offers.findByIdWithDetails(bulunan.getId()).orElseThrow();
+        List<Long> surenIds = offers.findTarafOlduguIdsByStatus(askida, LIVE);
+        int iptal = 0;
+        for (Long id : surenIds) {
+            SwapOffer o = offers.findByIdWithDetailsForUpdate(id).orElseThrow();
             if (!LIVE.contains(o.getStatus())) continue;
+            iptal++;
             boolean kabulEdilmisti = o.getStatus() == OfferStatus.ACCEPTED;
             boolean bulusmaVardi = o.getMeeting().isArranged();
             boolean askidakiGonderen = o.getFromUser().getId().equals(askida.getId());
@@ -510,7 +532,7 @@ public class SwapService {
                             "Kitabını teslim ettiysen sorunu şikâyet ederek yönetime bildirebilirsin."),
                     "/takas/takaslarim");
         }
-        return surenler.size();
+        return iptal;
     }
 
     private String zatenMesaji() {

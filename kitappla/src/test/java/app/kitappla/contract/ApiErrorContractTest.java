@@ -127,6 +127,59 @@ class ApiErrorContractTest extends ContractTestBase {
                 .andExpect(status().isBadRequest())
                 .andReturn();
 
-        assertApiError(res, 400, null, null);
+        assertApiError(res, 400, null, "VALIDATION_ERROR");
+    }
+
+    @Test
+    @DisplayName("Tip uyuşmazlığı parametre hatası - 400 BAD_REQUEST ve TYPE_MISMATCH kodu döner")
+    void typeMismatch_returns400WithTypeMismatchCode() throws Exception {
+        MvcResult res = apiGet("/api/v1/donations/gecersiz-sayisal-id", null);
+        assertApiError(res, 400, "Geçersiz parametre değeri", "TYPE_MISMATCH");
+    }
+
+    @Test
+    @DisplayName("Desteklenmeyen Media Type - 415 UNSUPPORTED_MEDIA_TYPE döner")
+    void unsupportedMediaType_returns415() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        CsrfInfo csrf = fetchCsrf(session);
+
+        MvcResult res = mvc.perform(post("/api/v1/auth/login")
+                        .session(session)
+                        .header(csrf.headerName(), csrf.token())
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("duz-metin-girisi"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andReturn();
+
+        assertApiError(res, 415, "Desteklenmeyen içerik türü", "UNSUPPORTED_MEDIA_TYPE");
+    }
+
+    @Test
+    @DisplayName("Doğrulama hatasında alan bazlı detaylar (details) içeren zengin hata döner")
+    void validationError_includesFieldLevelDetails() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        CsrfInfo csrf = fetchCsrf(session);
+        Map<String, String> body = Map.of(); // boş gövde
+
+        MvcResult res = mvc.perform(post("/api/v1/auth/register")
+                        .session(session)
+                        .header(csrf.headerName(), csrf.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        assertApiError(res, 400, null, "VALIDATION_ERROR");
+        JsonNode json = mapper.readTree(res.getResponse().getContentAsString());
+        assertThat(json.has("details")).isTrue();
+        assertThat(json.get("details").isObject()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Var olmayan API uç noktası - 404 NOT_FOUND döner")
+    void nonExistentEndpoint_returns404() throws Exception {
+        AuthUser user = registerNewUser("Gezgin", "api-404");
+        MvcResult res = apiGet("/api/v1/olmayan-bir-uc-nokta-adresi", user.session());
+        assertApiError(res, 404, null, "NOT_FOUND");
     }
 }

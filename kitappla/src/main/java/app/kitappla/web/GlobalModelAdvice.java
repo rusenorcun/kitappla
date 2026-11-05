@@ -30,9 +30,26 @@ public class GlobalModelAdvice {
         this.messages = messages;
     }
 
+    private static boolean rozetGereksiz(jakarta.servlet.http.HttpServletRequest request) {
+        if (request == null) return false;
+        String yol = request.getRequestURI();
+        if (yol == null) return false;
+        String ctx = request.getContextPath();
+        if (ctx != null && !ctx.isEmpty() && yol.startsWith(ctx)) {
+            yol = yol.substring(ctx.length());
+        }
+        return yol.endsWith("/akis")
+                || yol.equals("/admin/izlec/canli")
+                || yol.startsWith("/admin/belge/")
+                || yol.equals("/kitap/onizleme")
+                || yol.equals("/saglik")
+                || yol.startsWith("/.well-known/");
+    }
+
     /** Nav'daki mesaj rozeti: okunmamış mesajı olan sohbet sayısı. */
     @ModelAttribute("unreadMessages")
-    public long unreadMessages() {
+    public long unreadMessages(jakarta.servlet.http.HttpServletRequest request) {
+        if (rozetGereksiz(request)) return 0;
         User user = currentUser();
         return user == null ? 0 : messages.unreadConversations(user);
     }
@@ -55,7 +72,8 @@ public class GlobalModelAdvice {
     }
 
     @ModelAttribute("unreadCount")
-    public long unreadCount() {
+    public long unreadCount(jakarta.servlet.http.HttpServletRequest request) {
+        if (rozetGereksiz(request)) return 0;
         User user = currentUser();
         return user == null ? 0 : notifications.unreadCount(user);
     }

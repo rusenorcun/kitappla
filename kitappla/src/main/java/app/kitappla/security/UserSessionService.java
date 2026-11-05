@@ -25,19 +25,37 @@ public class UserSessionService {
     private final SessionRegistry sessionRegistry;
     private final UserRepository users;
     private final PersistentTokenRepository tokenRepository;
+    private final SessionTokenService sessionTokenService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public UserSessionService(SessionRegistry sessionRegistry,
+                              UserRepository users,
+                              @Lazy PersistentTokenRepository tokenRepository,
+                              SessionTokenService sessionTokenService) {
+        this.sessionRegistry = sessionRegistry;
+        this.users = users;
+        this.tokenRepository = tokenRepository;
+        this.sessionTokenService = sessionTokenService;
+    }
 
     public UserSessionService(SessionRegistry sessionRegistry,
                               UserRepository users,
                               @Lazy PersistentTokenRepository tokenRepository) {
-        this.sessionRegistry = sessionRegistry;
-        this.users = users;
-        this.tokenRepository = tokenRepository;
+        this(sessionRegistry, users, tokenRepository, null);
     }
 
     /**
      * Verilen kullanıcının tüm açık oturumlarını sonlandırır.
      */
     public void expireUserSessions(Long userId) {
+        expireOtherUserSessions(userId, null);
+    }
+
+    /**
+     * Verilen kullanıcının {@code keepSessionId} dışındaki tüm açık oturumlarını ve
+     * kalıcı Remember-Me çerezlerini sonlandırır.
+     */
+    public void expireOtherUserSessions(Long userId, String keepSessionId) {
         if (userId == null) return;
         users.findById(userId).ifPresent(u -> {
             if (tokenRepository != null && u.getEmail() != null) {
@@ -55,7 +73,13 @@ public class UserSessionService {
                 if (userId.equals(details.getUser().getId())) {
                     List<SessionInformation> sessions = sessionRegistry.getAllSessions(principal, false);
                     for (SessionInformation session : sessions) {
+                        if (keepSessionId != null && keepSessionId.equals(session.getSessionId())) {
+                            continue;
+                        }
                         session.expireNow();
+                        if (sessionTokenService != null) {
+                            sessionTokenService.remove(session.getSessionId());
+                        }
                         count++;
                     }
                 }
@@ -85,6 +109,9 @@ public class UserSessionService {
                     List<SessionInformation> sessions = sessionRegistry.getAllSessions(principal, false);
                     for (SessionInformation session : sessions) {
                         session.expireNow();
+                        if (sessionTokenService != null) {
+                            sessionTokenService.remove(session.getSessionId());
+                        }
                     }
                 }
             }
@@ -99,6 +126,9 @@ public class UserSessionService {
         SessionInformation info = sessionRegistry.getSessionInformation(sessionId);
         if (info != null) {
             info.expireNow();
+            if (sessionTokenService != null) {
+                sessionTokenService.remove(sessionId);
+            }
             log.info("Oturum (id={}) sonlandırıldı.", sessionId);
             return true;
         }

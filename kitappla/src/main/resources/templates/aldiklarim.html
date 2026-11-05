@@ -74,7 +74,7 @@
         <th:block th:if="${c.status.name() != 'DELIVERED' and c.status.name() != 'NO_SHOW' and c.status.name() != 'CANCELLED'}">
           <form th:replace="~{bulusma-fragments :: gelmediFormu('/gelmedi/bagis/' + ${c.id}, ${c.meeting}, '/aldiklarim')}"></form>
         </th:block>
-        <form th:if="${c.status.name() == 'MATCHED'}" th:action="@{'/teslimat/' + ${c.id} + '/iptal'}" method="post">
+        <form th:if="${c.status.name() == 'MATCHED' or c.status.name() == 'ARRANGED'}" th:action="@{'/teslimat/' + ${c.id} + '/iptal'}" method="post">
           <button class="btn btn-sm" type="submit" style="background:var(--accent-soft);color:var(--accent)">İptal et</button>
         </form>
         <form th:if="${c.status.name() == 'ARRANGED' or c.status.name() == 'SHIPPED'}"

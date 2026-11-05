@@ -60,7 +60,8 @@ public class YonetimAlanAdiFiltresi extends OncePerRequestFilter {
             request.setAttribute(YONETIM_ALANI, Boolean.TRUE);
             if (yol.equals("/") || yol.isEmpty()) {
                 // Çıkıştan sonra "/?cikis" gelir: bilgi mesajı giriş sayfasında gösterilsin
-                response.sendRedirect("cikis".equals(sorgu) ? "/login?cikis" : "/admin");
+                String ctx = request.getContextPath();
+                response.sendRedirect(ctx + ("cikis".equals(sorgu) ? "/login?cikis" : "/admin"));
                 return;
             }
             if (yonetimYolu || acik(yol)) {

@@ -150,7 +150,7 @@ public class AdminService {
      */
     @Transactional
     public User revokeStudent(Long userId) {
-        User u = users.findById(userId)
+        User u = users.findByIdForUpdate(userId)
                 .orElseThrow(() -> new IllegalStateException("Üye bulunamadı."));
         if (u.getStudentStatus() != StudentStatus.APPROVED && u.getStudentStatus() != StudentStatus.PENDING) {
             throw new IllegalStateException("Bu üye onaylı ya da bekleyen bir öğrenci değil.");
@@ -159,8 +159,15 @@ public class AdminService {
             deleteDocument(u.getDocumentPath());
             u.setDocumentPath(null);
         }
+        u.setStudentEmail(null);
         u.setStudentStatus(StudentStatus.NONE);
         users.save(u);
+        var openTokens = authTokens.findByUserAndTypeAndUsedAtIsNull(u, TokenType.EMAIL_VERIFY);
+        if (!openTokens.isEmpty()) {
+            java.time.Instant now = java.time.Instant.now();
+            openTokens.forEach(t -> t.setUsedAt(now));
+            authTokens.saveAll(openTokens);
+        }
         notifications.notify(u, "hesap",
                 "Öğrenci statünüz yönetim tarafından kaldırıldı.",
                 "/profil/ogrenci");
@@ -169,7 +176,7 @@ public class AdminService {
 
 
     private User pending(Long userId) {
-        User u = users.findById(userId)
+        User u = users.findByIdForUpdate(userId)
                 .orElseThrow(() -> new IllegalStateException("Üye bulunamadı."));
         if (u.getStudentStatus() != StudentStatus.PENDING)
             throw new IllegalStateException("Bu başvuru zaten sonuçlanmış.");
@@ -231,6 +238,7 @@ public class AdminService {
             donationService.askiyaAlinanUyeninTalepleriniIptalEt(u);
             requestService.askiyaAlinanUyeninIstekleriniKapat(u);
             swapService.askiyaAlinanUyeninTakaslariniIptalEt(u);
+            userSessions.expireUserSessions(u.getId());
         }
         notifications.notify(u, "hesap", blocked
                 ? "Hesabın yönetim tarafından askıya alındı. İtiraz için iletişime geçebilirsin."
@@ -296,7 +304,7 @@ public class AdminService {
     }
 
     private User target(User admin, Long userId, String selfMessage) {
-        User u = users.findById(userId)
+        User u = users.findByIdForUpdate(userId)
                 .orElseThrow(() -> new IllegalStateException("Üye bulunamadı."));
         if (admin != null && admin.getId().equals(u.getId()))
             throw new IllegalStateException(selfMessage);
@@ -307,6 +315,11 @@ public class AdminService {
 
     public List<Donation> openDonations() {
         return donations.findOpenWithDetails(DonationStatus.OPEN);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DonationView> openDonationViews() {
+        return donationService.toViews(openDonations());
     }
 
     public List<BookRequest> openRequests() {
@@ -320,7 +333,7 @@ public class AdminService {
     /** Bağış ilanını yayından kaldırır; verilmiş talepler bozulmasın diye kayıt silinmez. */
     @Transactional
     public void removeDonation(Long id, String reason) {
-        Donation d = donations.findByIdWithDetails(id)
+        Donation d = donations.findByIdWithDetailsForUpdate(id)
                 .orElseThrow(() -> new IllegalStateException("Bağış bulunamadı."));
         if (d.getStatus() == DonationStatus.CLOSED)
             throw new IllegalStateException("Bu bağış zaten kapalı.");
@@ -337,7 +350,7 @@ public class AdminService {
     /** Açık isteği kaldırır; henüz kimse karşılamadığı için kayıt tamamen silinir. */
     @Transactional
     public void removeRequest(Long id, String reason) {
-        BookRequest r = requests.findByIdWithDetails(id)
+        BookRequest r = requests.findByIdWithDetailsForUpdate(id)
                 .orElseThrow(() -> new IllegalStateException("İstek bulunamadı."));
         if (r.getStatus() != RequestStatus.OPEN)
             throw new IllegalStateException("Yalnızca karşılanmamış istekler kaldırılabilir.");
@@ -353,7 +366,7 @@ public class AdminService {
     /** Takas ilanını kapatır; bekleyen teklifi varsa önce onlar sonuçlandırılmalı. */
     @Transactional
     public void removeSwapBook(Long id, String reason) {
-        SwapBook s = swapBooks.findByIdWithDetails(id)
+        SwapBook s = swapBooks.findByIdWithDetailsForUpdate(id)
                 .orElseThrow(() -> new IllegalStateException("Takas ilanı bulunamadı."));
         if (s.getStatus() == SwapBookStatus.CLOSED)
             throw new IllegalStateException("Bu ilan zaten kapalı.");

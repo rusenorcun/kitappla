@@ -109,6 +109,12 @@ public class AdminApiController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping({"/docs/{id}/revoke", "/users/{id}/revoke-student"})
+    public ResponseEntity<Void> revokeStudent(@PathVariable Long id) {
+        adminService.revokeStudent(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // ---------- Üye Yönetimi ----------
 
     @GetMapping("/users")
@@ -195,8 +201,8 @@ public class AdminApiController {
         User admin = CurrentUser.get();
         if (admin == null) throw new IllegalStateException("Giriş yapmalısınız.");
 
-        List<DonationDto> donations = adminService.openDonations().stream()
-                .map(ApiDtoMapper::toDonationDto)
+        List<DonationDto> donations = adminService.openDonationViews().stream()
+                .map(v -> ApiDtoMapper.toDonationDto(v, null))
                 .toList();
 
         List<RequestDto> requests = adminService.openRequests().stream()

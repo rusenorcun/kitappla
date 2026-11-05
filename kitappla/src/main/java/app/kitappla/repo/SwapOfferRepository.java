@@ -36,6 +36,10 @@ public interface SwapOfferRepository extends JpaRepository<SwapOffer, Long> {
     @Query("select o from SwapOffer o where o.id = :id")
     Optional<SwapOffer> findByIdForUpdate(@Param("id") Long id);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query(DETAILS + " where o.id = :id")
+    Optional<SwapOffer> findByIdWithDetailsForUpdate(@Param("id") Long id);
+
     /** Teklifin dokunduğu iki takas ilanının kimlikleri (kabul öncesi kilitleme sırası için). */
     interface TakasKitapKimlikleri {
         Long getOfferedId();
@@ -100,6 +104,10 @@ public interface SwapOfferRepository extends JpaRepository<SwapOffer, Long> {
            """)
     List<SwapOffer> findTarafOlduguByStatus(@Param("uye") User uye,
                                             @Param("durumlar") java.util.Collection<OfferStatus> durumlar);
+
+    @Query("select o.id from SwapOffer o where (o.fromUser = :uye or o.toUser = :uye) and o.status in :durumlar")
+    List<Long> findTarafOlduguIdsByStatus(@Param("uye") User uye,
+                                          @Param("durumlar") java.util.Collection<OfferStatus> durumlar);
 
     /** Pano: bana gelen ve yanıt bekleyen teklifler. */
     long countByToUserAndStatus(User toUser, OfferStatus status);

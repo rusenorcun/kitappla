@@ -7,8 +7,11 @@
   <div style="font-size:64px; font-weight:800; letter-spacing:-2px; color:var(--faint); line-height:1"
        th:text="${status} ?: '400'">400</div>
   <h1 style="font-size:28px; font-weight:800; letter-spacing:-.6px; margin:12px 0 8px">İsteğini işleyemedik</h1>
-  <p class="muted" style="font-weight:500; margin:0 0 26px">Bağlantı eksik ya da hatalı olabilir.</p>
-  <div class="row gap-12" style="justify-content:center">
+  <p class="muted" style="font-weight:500; margin:0 0 12px" th:text="${message} ?: 'Bağlantı eksik ya da hatalı olabilir.'">Bağlantı eksik ya da hatalı olabilir.</p>
+  <p th:if="${cause != null and !#strings.isEmpty(cause) and cause != message}" 
+     style="font-size:13px; color:var(--text); background:rgba(0,0,0,0.05); padding:8px 14px; border-radius:6px; display:inline-block; margin:0 0 24px; max-width:600px" 
+     th:text="${cause}"></p>
+  <div class="row gap-12" style="justify-content:center; margin-top:16px">
     <a class="btn btn-primary" th:href="@{/}">Ana sayfaya dön</a>
     <a class="btn btn-soft" th:href="@{/kesfet}">Bağışları keşfet</a>
   </div>

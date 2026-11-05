@@ -25,7 +25,7 @@
         <span style="width:30px;height:30px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);margin-left:-10px"></span>
         <span style="width:30px;height:30px;border-radius:50%;background:#7A2E2A;border:2px solid var(--bg);margin-left:-10px"></span>
       </div>
-      <span th:text="${stats.members} + ' üye katıldı'">420 üye katıldı</span>
+      <span th:text="${stats.members} + ' doğrulanmış üye'">420 doğrulanmış üye</span>
     </div>
   </div>
   <div class="hero-art">
@@ -52,7 +52,7 @@
   <div><div style="font-size:40px;font-weight:800;letter-spacing:-1px" th:text="${stats.donations}">1.240</div><div class="muted" style="font-size:14px;font-weight:600">Bağışlanan kitap</div></div>
   <div><div style="font-size:40px;font-weight:800;letter-spacing:-1px;color:var(--accent)" th:text="${stats.delivered}">960</div><div class="muted" style="font-size:14px;font-weight:600">Öğrenciye ulaştı</div></div>
   <div><div style="font-size:40px;font-weight:800;letter-spacing:-1px;color:var(--sage)" th:text="${stats.swaps}">318</div><div class="muted" style="font-size:14px;font-weight:600">Tamamlanan takas</div></div>
-  <div><div style="font-size:40px;font-weight:800;letter-spacing:-1px" th:text="${stats.members}">420</div><div class="muted" style="font-size:14px;font-weight:600">Aktif üye</div></div>
+  <div><div style="font-size:40px;font-weight:800;letter-spacing:-1px" th:text="${stats.members}">420</div><div class="muted" style="font-size:14px;font-weight:600">Doğrulanmış üye</div></div>
 </div>
 
 <!-- NASIL ÇALIŞIR -->

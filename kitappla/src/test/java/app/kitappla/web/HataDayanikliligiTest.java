@@ -95,4 +95,14 @@ class HataDayanikliligiTest {
                 .andExpect(content().string(containsString("Bir şeyler ters gitti")))
                 .andExpect(content().string(containsString("KitAppLa")));
     }
+
+    @Test
+    void hataSayfasindaAciklamaVeNedenGosterilir() throws Exception {
+        mvc.perform(get("/error")
+                        .requestAttr("jakarta.servlet.error.status_code", 404)
+                        .requestAttr("jakarta.servlet.error.message", "Aradığınız kayıt bulunamadı.")
+                        .accept(org.springframework.http.MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("404")))
+                .andExpect(content().string(containsString("KitAppLa")));
+    }
 }

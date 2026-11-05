@@ -145,7 +145,9 @@ class AccountEmailVerificationTest {
                 .andExpect(redirectedUrl("/panom"));
         mvc.perform(post("/api/v1/requests").with(user(new AppUserDetails(fresh))).with(csrf())
                         .contentType("application/json").content("{}"))
-                .andExpect(jsonPath("$.code").doesNotExist());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(not("EMAIL_NOT_VERIFIED")))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     private String registerFromApp(String email) throws Exception {

@@ -151,14 +151,22 @@ class DonationLifecycleTest {
     }
 
     @Test
-    void bulusmaAyarlandiktanSonraIptalEdilemez() {
+    void bulusmaAyarlansaBileTeslimdenOnceIptalEdilebilirTeslimdenSonraEdilemez() {
         User donor = user("bagisci", false, "İzmir");
         User ogrenci = user("ogrenci", true, "Ankara");
         Donation d = newDonation(donor, 1);
         Claim c = donationService.claim(d.getId(), ogrenci);
         donationService.arrange(c.getId(), donor, bulusma());
 
-        assertThatThrownBy(() -> donationService.cancelClaim(c.getId(), ogrenci))
+        donationService.cancelClaim(c.getId(), ogrenci);
+        assertThat(donationService.view(d.getId()).orElseThrow().donation().getStatus())
+                .isEqualTo(DonationStatus.OPEN);
+
+        Claim c2 = donationService.claim(d.getId(), ogrenci);
+        donationService.arrange(c2.getId(), donor, bulusma());
+        donationService.deliver(c2.getId(), ogrenci);
+
+        assertThatThrownBy(() -> donationService.cancelClaim(c2.getId(), ogrenci))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("iptal edilemez");
     }

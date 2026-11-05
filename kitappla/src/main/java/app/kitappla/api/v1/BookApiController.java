@@ -35,8 +35,8 @@ public class BookApiController {
 
     @PostMapping("/preview")
     public ResponseEntity<BookMetadataDto> previewBook(@Valid @RequestBody PreviewBody body) {
-        BookMetadata meta = openGraphService.fetch(body.purchaseLink());
-        boolean found = meta != null && (meta.title() != null || meta.imageUrl() != null);
+        BookMetadata meta = bookService.preview(body.purchaseLink());
+        boolean found = meta != null && !meta.isEmpty();
         return ResponseEntity.ok(ApiDtoMapper.toBookMetadataDto(meta, found));
     }
 }

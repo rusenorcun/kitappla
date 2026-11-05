@@ -55,4 +55,19 @@ public class SessionTokenService {
             tokenToSession.remove(token);
         }
     }
+
+    /**
+     * Yalnızca verilen etkin oturum kimliklerini korur; düşmüş/süresi dolmuş oturumların
+     * opak token eşlemelerini bellekten temizler.
+     */
+    public void retainActive(java.util.Collection<String> activeSessionIds) {
+        if (activeSessionIds == null) return;
+        java.util.Set<String> activeSet = activeSessionIds instanceof java.util.Set<String> s
+                ? s : new java.util.HashSet<>(activeSessionIds);
+        for (String sid : sessionToToken.keySet()) {
+            if (!activeSet.contains(sid)) {
+                remove(sid);
+            }
+        }
+    }
 }

@@ -221,9 +221,11 @@
   </div>
 </div>
 
-<script>
+<script th:inline="javascript">
 /*<![CDATA[*/
 (function() {
+  var csrfParam = /*[[${_csrf != null ? _csrf.parameterName : '_csrf'}]]*/ '_csrf';
+  var csrfToken = /*[[${_csrf != null ? _csrf.token : ''}]]*/ '';
   var toggle = document.getElementById('auto-refresh-toggle');
   var refreshIcon = document.getElementById('refresh-icon');
   var sonKontrol = document.getElementById('son-kontrol-saati');
@@ -261,7 +263,7 @@
         document.getElementById('val-active-sessions').textContent = s.activeSessions;
         document.getElementById('val-online-users').textContent = s.onlineUsers;
         document.getElementById('val-online-breakdown').innerHTML =
-          '<span>' + s.onlineAdmins + '</span> yönetici, <span>' + s.onlineStudents + '</span> öğrenci';
+          '<span>' + escapeHtml(String(s.onlineAdmins)) + '</span> yönetici, <span>' + escapeHtml(String(s.onlineStudents)) + '</span> öğrenci';
         document.getElementById('val-persistent-logins').textContent = s.persistentLogins;
         document.getElementById('val-login-failures').textContent = s.loginFailuresTracked;
         document.getElementById('val-uptime').textContent = s.uptimeFormatted;
@@ -274,6 +276,12 @@
         document.getElementById('val-cpus').textContent = s.availableProcessors;
         document.getElementById('val-peak-threads').textContent = s.peakThreadCount;
         document.getElementById('val-db-product').textContent = s.dbProduct;
+
+        var dbBadge = document.getElementById('badge-db-status');
+        if (dbBadge) {
+          dbBadge.textContent = s.dbConnected ? 'Bağlı' : 'Bağlantı Yok';
+          dbBadge.className = s.dbConnected ? 'badge badge-sage' : 'badge badge-accent';
+        }
 
         var poolText = s.dbActiveConnections !== null
           ? 'Havuz: ' + s.dbActiveConnections + ' aktif, ' + s.dbIdleConnections + ' boşta'
@@ -320,19 +328,21 @@
         badges += '<span class="badge badge-sage" style="background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9">✓ Geçerli Oturumunuz</span> ';
       }
 
+      var safeId = encodeURIComponent(s.id || '');
       var actionHtml = '';
       if (s.currentSession) {
         actionHtml = '<span class="muted" style="font-size:12px;font-style:italic">Bu cihazdaki oturum</span>';
       } else {
-        actionHtml = '<form action="/admin/izlec/oturumlar/' + s.id + '/sonlandir" method="post" style="margin:0" ' +
+        actionHtml = '<form action="/admin/izlec/oturumlar/' + safeId + '/sonlandir" method="post" style="margin:0" ' +
           'onsubmit="return confirm(\'Bu kullanıcının oturumu derhal sonlandırılsın mı? Sayfayı yenilediğinde oturumu düşecektir.\')">' +
+          '<input type="hidden" name="' + escapeHtml(csrfParam) + '" value="' + escapeHtml(csrfToken) + '"/>' +
           '<button class="btn btn-soft btn-sm" type="submit" style="color:var(--accent-strong);font-weight:700">Oturumu Sonlandır</button>' +
           '</form>';
       }
 
-      html += '<div class="card card-pad row gap-14 oturum-karti" style="flex-wrap:wrap;justify-content:space-between;align-items:center" id="oturum-' + s.id + '">' +
+      html += '<div class="card card-pad row gap-14 oturum-karti" style="flex-wrap:wrap;justify-content:space-between;align-items:center" id="oturum-' + escapeHtml(s.id) + '">' +
         '<div class="row gap-12" style="min-width:220px;flex:1">' +
-          '<div class="avatar" style="flex-shrink:0">' + (s.initials || '?') + '</div>' +
+          '<div class="avatar" style="flex-shrink:0">' + escapeHtml(s.initials || '?') + '</div>' +
           '<div>' +
             '<div class="row gap-8" style="flex-wrap:wrap">' +
               '<span style="font-size:15px;font-weight:800">' + escapeHtml(s.userName) + '</span>' +
@@ -344,12 +354,12 @@
         '<div class="stack gap-4" style="min-width:180px">' +
           '<div class="row gap-6">' +
             '<span class="muted" style="font-size:12px;font-weight:600">Oturum ID:</span>' +
-            '<code style="font-size:12px;background:var(--bg);padding:2px 6px;border-radius:6px;font-family:monospace">' + s.maskedSessionId + '</code>' +
+            '<code style="font-size:12px;background:var(--bg);padding:2px 6px;border-radius:6px;font-family:monospace">' + escapeHtml(s.maskedSessionId) + '</code>' +
           '</div>' +
           '<div class="row gap-6">' +
             '<span class="muted" style="font-size:12px;font-weight:600">Son İşlem:</span>' +
-            '<span style="font-size:13px;font-weight:700">' + s.lastRequestRelative + '</span>' +
-            '<span class="muted" style="font-size:11px">(' + s.lastRequestTime + ')</span>' +
+            '<span style="font-size:13px;font-weight:700">' + escapeHtml(s.lastRequestRelative) + '</span>' +
+            '<span class="muted" style="font-size:11px">(' + escapeHtml(s.lastRequestTime) + ')</span>' +
           '</div>' +
         '</div>' +
         '<div style="flex-shrink:0">' + actionHtml + '</div>' +

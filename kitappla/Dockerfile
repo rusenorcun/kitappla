@@ -34,7 +34,7 @@ ENV LANG=C.UTF-8 \
     # Yığın, konteynere verilen belleğin %75'i: compose'da bellek sınırı olmadığında makinenin
     # tüm RAM'ine göre büyür (80 GB'lık makinede ~29 GB). Bellek taşarsa süreç temizce
     # kapanır ve restart politikası yeniden başlatır.
-    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+    JAVA_OPTS="-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+ParallelRefProcEnabled"
 
 EXPOSE 8080
 

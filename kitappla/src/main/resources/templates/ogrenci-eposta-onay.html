@@ -26,8 +26,9 @@
   /*<![CDATA[*/
   (function() {
     var token = /*[[${token}]]*/ '';
-    var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && token) {
+    var uygulama = /*[[${uygulama}]]*/ false;
+    var isAndroid = /Android/i.test(navigator.userAgent);
+    if (uygulama && isAndroid && token) {
       var intentUrl = "intent://profil/ogrenci?token=" + encodeURIComponent(token) + "#Intent;scheme=kitappla;package=com.kitappla.app;end";
       window.location.href = intentUrl;
     }

@@ -2,6 +2,7 @@ package app.kitappla.contract;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -108,6 +109,24 @@ class WebContractTest extends ContractTestBase {
     }
 
     @Test
+    @DisplayName("POST /register - Aynı e-posta ile tekrar kayıt olunduğunda form hata mesajı ile tekrar sunulur")
+    void webRegister_duplicateEmail_showsErrorMessage() throws Exception {
+        AuthUser user = registerNewUser("Mevcut Kullanıcı", "mevcut");
+
+        mvc.perform(post("/register")
+                        .with(csrf())
+                        .param("name", "Tekrar Kayıt")
+                        .param("email", user.email())
+                        .param("password", "sifre12345")
+                        .param("school", "ATATURK_UNIVERSITESI")
+                        .param("phone", "05559876543"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("register"))
+                .andExpect(model().attributeExists("error"))
+                .andExpect(content().string(containsString("zaten kayıtlı")));
+    }
+
+    @Test
     @DisplayName("Korumalı Sayfalar: Oturumsuz erişimde /login sayfasına yönlendirir (302)")
     void protectedPages_unauthenticated_redirectsToLogin() throws Exception {
         mvc.perform(get("/profil"))
@@ -140,5 +159,16 @@ class WebContractTest extends ContractTestBase {
         mvc.perform(get("/admin").session(adminSession))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Yönetim")));
+    }
+
+    @Test
+    @DisplayName("GET /olmayan-sayfa - Web arayüzünde markalı 404 hata sayfası görüntülenir")
+    void notFoundWebPage_returnsBranded404() throws Exception {
+        mvc.perform(get("/error")
+                        .requestAttr("jakarta.servlet.error.status_code", 404)
+                        .accept(MediaType.TEXT_HTML))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(containsString("404")))
+                .andExpect(content().string(containsString("KitAppLa")));
     }
 }
